@@ -298,8 +298,8 @@ export class Brain {
       return next;
     }
 
-    // 3. LLM (rate-limited 15s)
-    if (Date.now() - this.lastLLMCall > 15_000) {
+    // 3. LLM (rate-limited 30s — reduced from 15s to cut lag)
+    if (this.llm.isAvailable() && Date.now() - this.lastLLMCall > 30_000) {
       this.lastLLMCall = Date.now();
       try {
         const goal = await this.llmGoal();
@@ -325,11 +325,15 @@ export class Brain {
       return { goal: 'survive', target: 'equip_armor', reason: 'unequipped armor in inventory' };
 
     // ── 1. Threat response ──
-    const hostile = nearestHostile(this.bot, 12);
+    const hostile = nearestHostile(this.bot, 16);
     if (hostile) {
-      if (shouldFight(this.bot) && hostile.position.distanceTo(this.bot.entity.position) < 16)
+      const dist = hostile.position.distanceTo(this.bot.entity.position);
+      // Critical flee — always flee at HP ≤ 6, ignore cooldown
+      if (hp <= 6 && dist < 12)
+        return { goal: 'survive', target: 'flee', reason: 'critical health — must flee' };
+      if (shouldFight(this.bot) && dist < 16)
         return { goal: 'combat', target: 'nearest', reason: `${hostile.name} nearby — fighting` };
-      if (hp <= 10 || hostile.position.distanceTo(this.bot.entity.position) < 5) {
+      if (hp <= 10 || dist < 5) {
         if (Date.now() > this.fleeSafeUntil)
           return { goal: 'survive', target: 'flee', reason: `${hostile.name} attacking` };
       }
@@ -357,13 +361,16 @@ export class Brain {
     }
 
     // ── 4. Wood stock check ──
-    // FIX Bug #6: was only triggered on absolute zero (no logs AND no planks).
-    // Bot would try to craft a pickaxe with 1 plank and fail, then get
-    // suppressed, then wander aimlessly. Now triggers if stock is critically
-    // low so the bot proactively tops up before it runs dry.
+    // FIX Bug #6 + explore fallback: when gather/wood is suppressed (unable to
+    // find trees), switch to explore/any to move to a new area, then un-suppress.
     const logCount = totalLogCount(this.bot);
     const plankCount = totalPlanksCount(this.bot);
     if (logCount < 4 && plankCount < 8) {
+      if (this.isSuppressed('gather', 'wood')) {
+        // Can't find wood nearby — explore to a new area
+        this.suppressed.delete('gather:wood');   // un-suppress after moving
+        return { goal: 'explore', target: 'any', reason: 'no wood nearby — relocating' };
+      }
       return {
         goal: 'gather', target: 'wood',
         reason: logCount === 0 && plankCount === 0

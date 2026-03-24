@@ -82,13 +82,13 @@ export class Executor {
     // Low health — eat to regen if possible
     if (hp <= 14 && food <= 14) return { goal: 'survive', target: 'eat', reason: 'eat to heal' };
 
-    // Hostile mob very close — fight or flee based on equipment
-    const hostile = getNearestHostile(this.bot, 5);
+    // Hostile mob nearby — fight or flee based on equipment
+    const hostile = getNearestHostile(this.bot, 8);
     if (hostile) {
-      if (shouldFight(this.bot)) {
+      if (shouldFight(this.bot) && this.bot.health > 6) {
         return { goal: 'combat', target: 'nearest', reason: `${hostile.name} attacking — fighting back` };
       }
-      return { goal: 'survive', target: 'flee', reason: `${hostile.name} too close — unarmed` };
+      return { goal: 'survive', target: 'flee', reason: `${hostile.name} too close — ${shouldFight(this.bot) ? 'low hp' : 'unarmed'}` };
     }
 
     return null;

@@ -1,5 +1,5 @@
 # Minecraft AI Bot — Master Reference & INFO.md
-> Version 6 · Mineflayer + Ollama (qwen2.5:1.5b) · MC 1.21.4
+> Version 7 · Mineflayer + Ollama (optional, qwen2.5:1.5b) · MC 1.21.4
 > Use this as the master prompt context for every new chat about this bot.
 
 ---
@@ -62,6 +62,7 @@ index.ts  ←──── main loop, event wiring, safety ticker
     │
     └── utils/
         ├── navigation.ts ← navigateTo(), goToBlock(), wander(), lookAround()
+        ├── chat_queue.ts ← global chat throttle, max 1 msg/1.5s
         └── logger.ts     ← coloured console output
 ```
 
@@ -90,7 +91,8 @@ Wires all modules together, starts all timers, handles player chat and CLI comma
 | Safety loop | 1 000 ms | `world.scan()` → `executor.emergency()` → run if non-null |
 | Look-at-player | 3 000 ms | Turn head toward nearest player ≤12 m |
 | Look-around | 8 000 ms | Random head yaw/pitch (idle animation) |
-| Goal loop | continuous (500 ms sleep between goals) | `brain.pickGoal()` → `executor.run()` |
+| Guard scan | 2 000 ms | If guard mode ON, check for hostiles within 8 m |
+| Goal loop | continuous (`cfg.goalTickMs` sleep between goals) | `brain.pickGoal()` → `executor.run()` |
 
 ### Inventory Auto-Equip
 On every `bot.inventory.updateSlot` event: iterates armor slots 5–8 (head, chest, legs, feet), equips any unequipped armor piece found in inventory.
@@ -100,10 +102,23 @@ On every `bot.inventory.updateSlot` event: iterates armor slots 5–8 (head, che
 |---|---|
 | `!stop` | Sets `running=false`, bot idles |
 | `!start` | Sets `running=true`, resumes goal loop |
-| `!status` | Prints `hp`, `food`, `busy` flag |
+| `!status` | Prints `hp`, `food`, `busy`, `guard` flags |
 | `!inv` | Prints first 8 inventory items with counts |
 | `!world` | Prints known discovery keys from WorldMemory |
-| `!follow` | Pushes `social/follow_trusted` goal directly (bypasses LLM) |
+| `!pos` | Prints bot's current coordinates |
+| `!follow` / `!come` | Start following nearest player |
+| `!mine <resource>` | Mine specified resource (wood, stone, coal, iron, diamond, etc) |
+| `!craft <item>` | Craft specified item (e.g., !craft iron_pickaxe) |
+| `!smelt <item>` | Smelt specified item (iron_ingot, charcoal) |
+| `!build [type]` | Build structure (shelter, chest_room, furnace_station) |
+| `!explore [target]` | Explore (any, village, cave) |
+| `!hunt [mob]` | Hunt specified mob (cow, sheep, chicken, pig) |
+| `!eat` | Force eat best food |
+| `!sleep` | Force sleep in bed |
+| `!fight` / `!attack` | Fight nearest hostile |
+| `!guard` | Toggle guard mode — fight all nearby hostiles |
+| `!drop <item>` | Drop specified item from inventory |
+| `!help` | List all commands |
 
 ### Attack Detection
 Listens to `entityHurt` on the bot entity. Finds the nearest player within 5 m and calls `trust.onAttacked()`.
@@ -737,9 +752,9 @@ allow1by1towers = true
 | `MC_USERNAME` | AIBot | Bot login name |
 | `MC_VERSION` | 1.21.4 | MC protocol version |
 | `MC_PASSWORD` | (empty) | Auth password for `/register` + `/login` |
-| `OLLAMA_URL` | http://localhost:11434 | Ollama API base URL |
+| `OLLAMA_URL` | http://localhost:11434 | Ollama API base URL (optional — bot runs without it) |
 | `OLLAMA_MODEL` | qwen2.5:1.5b | Model to use |
-| `GOAL_TICK_MS` | 8000 | **⚠️ Read but UNUSED** — see bugs section |
+| `GOAL_TICK_MS` | 8000 | Sleep between goal cycles |
 | `SAFETY_TICK_MS` | 1000 | Safety loop interval |
 
 ---
@@ -793,242 +808,36 @@ allow1by1towers = true
 
 ## ⚠️ Logic Errors & Bugs
 
-These are confirmed issues that make the bot less smart, less responsive, or cause it to fail.
+> **All 14 bugs from v6 have been fixed.** See `Bugs.md` for the complete history of each fix.
 
----
-
-### 🔴 CRITICAL BUG #1 — Emergency blocked during long goals
-**File:** `index.ts` — Safety loop  
-**Code:**
-```typescript
-setInterval(async () => {
-  if (!running || emergencyBusy || goalBusy) return;  // ← BUG HERE
-  ...emergency check...
-}, cfg.safetyTickMs);
-```
-**Problem:** When `goalBusy=true` (bot is smelting, exploring, building — which can take up to 90 s), the emergency check is completely **skipped**. The bot can die from a creeper explosion or starve while waiting for furnace output.
-
-**Fix:**
-```typescript
-setInterval(async () => {
-  if (!running || emergencyBusy) return;  // Remove || goalBusy
-  world.scan(bot);
-  const emergency = executor.emergency();
-  if (!emergency) return;
-
-  emergencyBusy = true;
-  // Signal goal loop to stop current goal
-  const prevGoalBusy = goalBusy;
-  // Run emergency regardless of goal state
-  try {
-    const result = await executor.run(emergency);
-    brain.recordOutcome(emergency.goal, emergency.target, result.success, result.reason);
-  } catch (e: any) {
-    log.error(`Emergency error: ${e.message}`);
-  } finally {
-    emergencyBusy = false;
-  }
-}, cfg.safetyTickMs);
-```
-This is the **#1 reason the bot keeps dying and failing** — it cannot react to threats or hunger while any goal is running.
-
----
-
-### 🔴 CRITICAL BUG #2 — `GOAL_TICK_MS` env var is read but never used
-**File:** `index.ts`  
-**Code:**
-```typescript
-goalTickMs: Number(process.env.GOAL_TICK_MS ?? 8000),  // stored in cfg
-// ...
-// Goal loop only has:
-await sleep(500);  // cfg.goalTickMs is NEVER referenced
-```
-**Problem:** The goal loop runs every ~500 ms between goals regardless of `GOAL_TICK_MS=8000`. This means the bot cycles through goals much faster than intended and can spam the same goal repeatedly within seconds.
-
-**Fix:**
-```typescript
-// In goal loop:
-await sleep(cfg.goalTickMs);  // use the configured value
-```
-
----
-
-### 🟠 SERIOUS BUG #3 — `smelt()` blocks for up to 90 s with goalBusy=true
-**File:** `goals/craft.ts` — `smelt()` function  
-**Code:**
-```typescript
-while (Date.now() - start < Math.min(count * 12_000, 90_000)) {
-  await sleep(2_000);
-  ...
-}
-```
-**Problem:** Combined with Bug #1, the bot can be locked in smelting for up to 90 seconds with no emergency response possible.
-
-**Fix:** Add a per-iteration emergency check inside the smelt loop, or break out early when the executor signals an interrupt. Minimum fix: reduce max smelt wait to 30 s and handle the partial output.
-
----
-
-### 🟠 SERIOUS BUG #4 — `tryCookMeat()` fuel calculation is wrong
-**File:** `goals/farm.ts`  
-**Code:**
-```typescript
-const cookCount = Math.min(rawMeat.count, fuelItem.count * 2);
-```
-**Problem:** Assumes each fuel item smelts 2 items. Coal actually smelts **8** items. This puts far too much fuel into the furnace and wastes coal.
-
-**Fix:**
-```typescript
-const FUEL_SMELT_COUNT: Record<string, number> = {
-  coal: 8, charcoal: 8, oak_log: 1.5, // etc.
-};
-const smeltsPerFuel = FUEL_SMELT_COUNT[fuelName] ?? 1;
-const cookCount = Math.min(rawMeat.count, Math.floor(fuelItem.count * smeltsPerFuel));
-```
-
----
-
-### 🟡 MODERATE BUG #5 — Flee cooldown can block flee when still in danger
-**File:** `brain.ts`  
-**Code:**
-```typescript
-if (Date.now() > this.fleeSafeUntil)
-  return { goal: 'survive', target: 'flee', reason: ... };
-```
-**Problem:** After a successful flee, `fleeSafeUntil` blocks flee for 30 s. If the bot wanders back into the same hostile area within 30 s (which explore/gather will do), it won't flee again.
-
-**Fix:** Only set `fleeSafeUntil` if the bot has actually moved significantly away from the danger, OR set the cooldown much shorter (5 s).
-
----
-
-### 🟡 MODERATE BUG #6 — `deterministicGoal` step 4 only triggers on ZERO wood
-**File:** `brain.ts`
-```typescript
-if (!hasAnyLogs(this.bot) && !hasAnyPlanks(this.bot))
-  return { goal: 'gather', target: 'wood', reason: 'no wood at all' };
-```
-**Problem:** Bot won't proactively gather wood unless completely out. If it has 1 plank left, it won't refill. The `alreadyAchieved` threshold (16 logs) handles the ceiling but there's no floor — the bot may try to craft a pickaxe with 1 plank and fail.
-
-**Fix:** Add a low-stock gather step: if logs < 4 AND planks < 8, gather wood.
-
----
-
-### 🟡 MODERATE BUG #7 — Strategy queue depletes without refilling
-**File:** `brain.ts` — `pickGoal()`  
-**Problem:** Strategy queue items are `shift()`ed off and never re-added. Once a phase's strategy queue is empty (all goals achieved or skipped), the bot immediately falls to the LLM tier (rate-limited to 15 s). If LLM also fails or is suppressed, it hits the fallback and wanders. The queue is only reset on a phase transition.
-
-**Fix:** In `pickGoal()`, after the strategy queue is empty, rebuild it from unachieved goals before going to LLM:
-```typescript
-if (this.strategyQueue.length === 0) {
-  this.strategyQueue = STRATEGIES[this.currentPhase]
-    .filter(g => !this.alreadyAchieved(g) && !this.isSuppressed(g.goal, g.target) && this.canAttempt(g));
-}
-```
-
----
-
-### 🟡 MODERATE BUG #8 — `noPath` in navigation resolves too late
-**File:** `utils/navigation.ts`  
-**Code:**
-```typescript
-function onPathUpdate(r: any) {
-  if (r.status === 'noPath') {
-    if (unstickCount >= 2) {
-      cleanup(); resolve(false);
-    }
-  }
-}
-```
-**Problem:** On the first `noPath`, nothing happens — the bot just keeps trying. This wastes time (up to the full timeout) when the path is genuinely blocked.
-
-**Fix:** On first `noPath`, immediately try `wander()` to reposition, then retry pathfinding once. On second `noPath`, give up.
-
----
-
-### 🟡 MODERATE BUG #9 — `build.ts` has its own `navigateTo()` with only 10 s timeout
-**File:** `goals/build.ts`  
-**Code:**
-```typescript
-const NAV_TIMEOUT_MS = 10_000;
-async function navigateTo(bot, x, y, z, reach = 2): Promise<boolean> { ... }
-```
-**Problem:** This is a completely different (simplified) `navigateTo` from `utils/navigation.ts`. It lacks the stuck recovery logic and adaptive timeout. Build goals will fail navigation far more often than other goals.
-
-**Fix:** Import and use `navigateTo` from `utils/navigation.ts` instead.
-
----
-
-### 🟡 MODERATE BUG #10 — `craft.ts` is duplicated
-**Problem:** Files `src/goals/craft.ts` appears twice with identical content. This is a copy-paste artifact in the provided code. Ensure only one canonical version exists in the project.
-
----
-
-### 🟢 MINOR BUG #11 — LearningMemory suppression duplicates Brain suppression
-**Files:** `memory/learning.ts` + `brain.ts`  
-**Problem:** Both `Brain` (3-fail/120 s window) and `LearningMemory` (3-fail/5 min window) maintain independent suppression lists. The Brain checks its own `isSuppressed()` but never checks `learning.isSuppressed()`. The two systems can produce different suppression states.
-
-**Fix:** Either remove suppression from `LearningMemory` and rely only on Brain's, or have Brain check both:
-```typescript
-private isSuppressed(goal: string, target: string): boolean {
-  return this._isSupressed(goal, target) || this.learning.isSuppressed(goal, target);
-}
-```
-
----
-
-### 🟢 MINOR BUG #12 — `qwen2.5:1.5b` is too small for reliable JSON output
-**Problem:** A 1.5B parameter model struggles to reliably produce valid JSON goal decisions. The keyword parser mitigates this for common commands, but novel situations still fall through to the LLM and may produce invalid goals (e.g. `"goal":"forage"` which is rejected).
-
-**Recommendation:** Use `qwen2.5:7b` or `llama3.2:3b` for more reliable JSON. Both run on consumer hardware.
-
----
-
-### 🟢 MINOR BUG #13 — Sleep in `bot.ts` auth sequence not long enough on slow servers
-**Code:**
-```typescript
-await sleep(2000);
-bot.chat(`/register ${cfg.password} ${cfg.password}`);
-await sleep(1500);
-bot.chat(`/login ${cfg.password}`);
-```
-**Problem:** On some servers the initial spawn + plugin load takes longer than 2 s. The `/register` fires before the server sends the auth prompt and gets ignored.
-
-**Fix:** Wait for a chat message from the server containing "register" or "login" before responding, or increase delays to 3000/2000.
+### v7 Additional Fixes
+| Issue | Fix |
+|---|---|
+| Bot crashed if Ollama not running | Ollama is now optional — bot starts in deterministic-only mode |
+| Bot froze during LLM calls | 10s AbortSignal timeout on all LLM requests |
+| Chat message spam | Global chat throttle via `chat_queue.ts` (max 1 msg/1.5s) |
+| No auto-reconnect on disconnect | Auto-reconnect with 5s delay, up to 50 retries |
+| Bot didn't fight back on attack | Combat retaliation via `entityHurt` event |
+| Bot stuck without wood in barren area | Explore fallback when `gather/wood` is suppressed |
+| LLM called too often (15s) | Rate-limited to 30s, skipped entirely when Ollama offline |
+| No guard mode | `!guard` toggles periodic hostile scanning |
+| Emergency detection too late (5m) | Emergency hostile radius widened to 8m |
+| Flee blocked at critical HP | Critical flee at HP≤6 ignores cooldown |
 
 ---
 
 ## Improvement Recommendations
 
 ### High Impact
-1. **Fix Bug #1 (emergency blocking)** — this alone will dramatically improve survival rate
-2. **Fix Bug #2 (GOAL_TICK_MS)** — prevents goal spam and CPU thrashing
-3. **Upgrade LLM model** — `qwen2.5:7b` is much more reliable; use `qwen2.5:1.5b` only for speed
+1. **Upgrade LLM model** — `qwen2.5:7b` is much more reliable; use `qwen2.5:1.5b` only for speed
+2. **Add more exploration patterns** — spiral/grid search for systematic chunk coverage
+3. **Persistent chunk memory** — save explored chunks to disk for 24/7 sessions
 
 ### Medium Impact
-4. **Add `isInterrupted` flag to long-running goals** — lets emergency signal them to abort early
-5. **Add `gather/food` target** — currently bot hunts cows specifically; a generic food target could forage apples, bread from villages, etc.
-6. **Cache `minecraft-data` require** — every goal file does `require('minecraft-data')(bot.version)` on every call. Cache it module-level for performance.
-7. **Pathfinder goal replacement** — when following a moving target, use `GoalFollow` not repeated `GoalNear` calls, which causes stuttering
-
-### Low Impact / Quality of Life
-8. **Add `!goals` command** — print current strategy queue and suppressed goals for debugging
-9. **Add `!brain` command** — show current phase and last 5 decisions
-10. **Increase `num_predict` to 120** — the LLM sometimes cuts off JSON mid-stream at 80 tokens
-11. **Add `!suppress` and `!unsuppress` commands** — for manual debugging of stuck loops
-12. **World scan on `goal_reached`** — currently only scans on safety tick; scanning after each nav arrival catches more discoveries
-13. **Add crafting table world discovery** — currently Brain checks `world.knows('crafting_table')` but `WorldMemory.scan()` only scans within 24 m. Place crafting table in world scan and increase radius to 32 m.
+4. **Add `!goals` command** — print current strategy queue and suppressed goals
+5. **Add `!brain` command** — show current phase and last 5 decisions
+6. **World scan on `goal_reached`** — scan after each nav arrival to catch more discoveries
 
 ---
 
-## Files Still Needed for Complete Documentation
-
-The following files were not provided and contain important implementation details:
-- `src/data/blocks.ts` — BLOCK_ALIASES, tool mappings, ore tier requirements
-- `src/data/items.ts` — getBestFood, getBestTool implementations
-- `src/data/mobs.ts` — mob lists, getNearestHostile/Passive implementations
-- `src/data/strategies.ts` — STRATEGIES arrays for each phase
-- `src/data/recipes.ts` — any custom recipe data
-- `src/memory/trust.ts` — shown but not the full file (partial only)
-
----
-
-*Last updated: generated from v6 source code review*
+*Last updated: v7 overhaul*

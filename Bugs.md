@@ -1,5 +1,5 @@
 # Minecraft AI Bot — Bug Report & Fix Guide
-> Version 6 · All confirmed issues with exact file locations, root cause, and fix code.
+> Version 7 · All 14 bugs below are **FIXED** in the current codebase. Additionally, 10 new issues were fixed in the v7 overhaul (see Info.md § v7 Additional Fixes).
 
 ---
 

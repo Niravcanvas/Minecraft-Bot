@@ -1,7 +1,7 @@
 import { Bot } from 'mineflayer';
 import { BLOCK_ALIASES, TOOL_FOR_BLOCK, MIN_TIER_FOR_ORE, TOOL_TIERS } from '../data/blocks';
 import { getBestTool } from '../data/items';
-import { navigateTo } from '../utils/navigation';
+import { navigateTo, wander } from '../utils/navigation';
 import { log } from '../utils/logger';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -88,7 +88,9 @@ export async function executeGather(bot: Bot, target: string): Promise<{ success
 
   let mined = 0;
   let navFails = 0;
+  let wanderAttempts = 0;
   const MAX_NAV_FAILS = 4;
+  const MAX_WANDER_ATTEMPTS = 2;
   const targetCount = target === 'wood' ? 16 : target === 'stone' ? 24 : 8;
   const triedPositions = new Set<string>();
 
@@ -122,6 +124,23 @@ export async function executeGather(bot: Bot, target: string): Promise<{ success
           break;
         }
       }
+
+      // Still nothing? Wander to a new area and try again (up to 2 times)
+      if (!blockPos && wanderAttempts < MAX_WANDER_ATTEMPTS) {
+        wanderAttempts++;
+        log.info(`[gather] No ${target} found — wandering to new area (attempt ${wanderAttempts}/${MAX_WANDER_ATTEMPTS})`);
+        const wandered = await wander(bot, 120, 3);
+        if (wandered) {
+          // Re-scan from new location
+          const newPositions = scanForBlocks(bot, blockIds, 64);
+          if (newPositions.length > 0) {
+            blockPos = newPositions[0];
+            triedPositions.add(`${blockPos.x},${blockPos.y},${blockPos.z}`);
+          }
+        }
+        if (!blockPos) continue;   // try next attempt
+      }
+
       if (!blockPos) break;
     }
 

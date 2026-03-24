@@ -247,7 +247,7 @@ const DISCOVERY_MESSAGES: Record<string, string[]> = {
   iron_ore:       ['Found iron ore!', 'Iron ore spotted nearby.'],
 };
 
-export function proactiveChat(bot: Bot, category: string, detail?: string): void {
+export function proactiveChat(bot: Bot, category: string, detail?: string, chatFn?: (bot: Bot, msg: string) => void): void {
   const now = Date.now();
   if (now - lastProactiveChat < CHAT_COOLDOWN_MS) return;
 
@@ -260,7 +260,7 @@ export function proactiveChat(bot: Bot, category: string, detail?: string): void
   const msg  = messages[Math.floor(Math.random() * messages.length)];
   const full = detail ? `${msg} ${detail}` : msg;
 
-  bot.chat(full);
+  if (chatFn) chatFn(bot, full); else bot.chat(full);
   lastProactiveChat = now;
   log.info(`[chat] proactive: ${full}`);
 }

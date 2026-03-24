@@ -2605,6 +2605,986 @@
         "skeleton"
       ],
       "timestamp": 1774380119284
+    },
+    {
+      "goal": "gather",
+      "target": "wood",
+      "success": false,
+      "duration": 74379,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382167249
+    },
+    {
+      "goal": "gather",
+      "target": "wood",
+      "success": false,
+      "duration": 54813,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382230071
+    },
+    {
+      "goal": "craft",
+      "target": "wooden_axe",
+      "success": false,
+      "duration": 4,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382238075
+    },
+    {
+      "goal": "explore",
+      "target": "any",
+      "success": false,
+      "duration": 49539,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382295617
+    },
+    {
+      "goal": "explore",
+      "target": "any",
+      "success": false,
+      "duration": 44855,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382348477
+    },
+    {
+      "goal": "gather",
+      "target": "wood",
+      "success": false,
+      "duration": 70418,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382426905
+    },
+    {
+      "goal": "explore",
+      "target": "any",
+      "success": false,
+      "duration": 47135,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382482041
+    },
+    {
+      "goal": "build",
+      "target": "shelter",
+      "success": false,
+      "duration": 10,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382490054
+    },
+    {
+      "goal": "build",
+      "target": "shelter",
+      "success": false,
+      "duration": 8,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382498075
+    },
+    {
+      "goal": "build",
+      "target": "shelter",
+      "success": false,
+      "duration": 9,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382507833
+    },
+    {
+      "goal": "explore",
+      "target": "village",
+      "success": true,
+      "duration": 90691,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774382606539
+    },
+    {
+      "goal": "survive",
+      "target": "sleep",
+      "success": false,
+      "duration": 84,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774382614975
+    },
+    {
+      "goal": "survive",
+      "target": "sleep",
+      "success": false,
+      "duration": 77,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774382623060
+    },
+    {
+      "goal": "survive",
+      "target": "sleep",
+      "success": false,
+      "duration": 143,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774382631232
+    },
+    {
+      "goal": "gather",
+      "target": "wood",
+      "success": false,
+      "duration": 71037,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774382710277
+    },
+    {
+      "goal": "gather",
+      "target": "wood",
+      "success": false,
+      "duration": 50150,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774382768430
+    },
+    {
+      "goal": "gather",
+      "target": "wood",
+      "success": false,
+      "duration": 51299,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774382827745
+    },
+    {
+      "goal": "survive",
+      "target": "sleep",
+      "success": false,
+      "duration": 12,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774382835773
+    },
+    {
+      "goal": "explore",
+      "target": "village",
+      "success": true,
+      "duration": 91966,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774382946836
+    },
+    {
+      "goal": "gather",
+      "target": "wood",
+      "success": false,
+      "duration": 54162,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383080261
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [
+        "skeleton"
+      ],
+      "timestamp": 1774383170838
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [
+        "skeleton"
+      ],
+      "timestamp": 1774383178853
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [
+        "skeleton"
+      ],
+      "timestamp": 1774383193004
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [
+        "skeleton"
+      ],
+      "timestamp": 1774383201008
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [
+        "skeleton"
+      ],
+      "timestamp": 1774383209585
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [
+        "skeleton"
+      ],
+      "timestamp": 1774383225031
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [
+        "skeleton"
+      ],
+      "timestamp": 1774383233044
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [
+        "skeleton"
+      ],
+      "timestamp": 1774383241046
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383249061
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383257064
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383272778
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383280786
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383288801
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383296814
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383311386
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383319392
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383327399
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383335416
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383343432
+    },
+    {
+      "goal": "survive",
+      "target": "flee",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383351438
+    },
+    {
+      "goal": "gather",
+      "target": "wood",
+      "success": false,
+      "duration": 49494,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [
+        "skeleton"
+      ],
+      "timestamp": 1774383409040
+    },
+    {
+      "goal": "combat",
+      "target": "nearest",
+      "success": false,
+      "duration": 30054,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [
+        "skeleton"
+      ],
+      "timestamp": 1774383447109
+    },
+    {
+      "goal": "social",
+      "target": "follow_trusted",
+      "success": true,
+      "duration": 30913,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383486059
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383494064
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383502074
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383510081
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383518093
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383526106
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383534113
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383542846
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383550887
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383559187
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383567440
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383575455
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383583459
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383591462
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383599476
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383607482
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383615488
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383623495
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "night",
+      "nearbyThreats": [],
+      "timestamp": 1774383631510
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383639529
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383647532
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383655536
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383663544
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383671785
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383693321
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383701327
+    },
+    {
+      "goal": "build",
+      "target": "house",
+      "success": false,
+      "duration": 4,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383709340
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383717354
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383725363
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383733377
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383741386
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383749511
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383757513
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383765671
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383773818
+    },
+    {
+      "goal": "build",
+      "target": "shelter",
+      "success": false,
+      "duration": 89,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383782311
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383790315
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383798327
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383806337
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383814348
+    },
+    {
+      "goal": "craft",
+      "target": "planks",
+      "success": false,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383822361
+    },
+    {
+      "goal": "craft",
+      "target": "sticks",
+      "success": false,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383830617
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383838650
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383846682
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383854859
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383863323
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383871348
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383879353
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383887361
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 1,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383895627
+    },
+    {
+      "goal": "social",
+      "target": "follow_trusted",
+      "success": true,
+      "duration": 30813,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383934450
+    },
+    {
+      "goal": "survive",
+      "target": "eat",
+      "success": true,
+      "duration": 1965,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774383945580
+    },
+    {
+      "goal": "gather",
+      "target": "wood",
+      "success": false,
+      "duration": 50141,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774384004060
+    },
+    {
+      "goal": "build",
+      "target": "dirt_house",
+      "success": false,
+      "duration": 0,
+      "gained": {},
+      "timeOfDay": "day",
+      "nearbyThreats": [],
+      "timestamp": 1774384012147
     }
   ]
 }
