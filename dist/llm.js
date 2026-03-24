@@ -27,12 +27,13 @@ class OllamaClient {
             return false;
         }
     }
-    async chat(messages) {
+    async chat(messages, format) {
         const res = await fetch(`${this.baseUrl}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: this.model, messages, stream: false, format: 'json',
+                model: this.model, messages, stream: false,
+                ...(format && { format }),
                 options: { temperature: 0.15, num_predict: 80, repeat_penalty: 1.1 },
             }),
         });

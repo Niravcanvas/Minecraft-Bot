@@ -12,6 +12,15 @@ export function createBot(cfg: { host: string; port: number; username: string; v
 
   bot.loadPlugin(pathfinder);
 
+  // Load PvP plugin
+  try {
+    const { plugin: pvp } = require('mineflayer-pvp');
+    bot.loadPlugin(pvp);
+    log.info('PvP plugin loaded');
+  } catch {
+    log.warn('mineflayer-pvp not available — combat will use manual attacks');
+  }
+
   bot.once('spawn', async () => {
     // Configure pathfinder movements
     const mcData    = require('minecraft-data')(bot.version);
@@ -44,7 +53,15 @@ export function createBot(cfg: { host: string; port: number; username: string; v
     }
   });
 
-  bot.on('death',   () => { log.warn('Died — respawning...'); try { (bot as any).respawn(); } catch {} });
+  bot.on('death', () => {
+    log.warn('Died — respawning...');
+    try { (bot as any).respawn(); } catch {}
+    // Try /grave after respawn to recover items
+    setTimeout(() => {
+      log.info('Running /grave to recover items...');
+      bot.chat('/grave');
+    }, 3000);
+  });
   bot.on('error',   (e) => log.error(`Error: ${e.message}`));
   bot.on('end',     ()  => log.warn('Disconnected'));
   bot.on('kicked',  (r) => log.warn(`Kicked: ${r}`));

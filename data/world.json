@@ -1,56 +1,66 @@
 {
-  "village": {
-    "name": "village",
-    "pos": {
-      "x": -1004,
-      "y": 75,
-      "z": -918
+  "chest": [
+    {
+      "name": "chest",
+      "pos": {
+        "x": -1054,
+        "y": 64,
+        "z": -920
+      },
+      "timestamp": 1774365948979
+    }
+  ],
+  "crafting_table": [
+    {
+      "name": "crafting_table",
+      "pos": {
+        "x": -1060,
+        "y": 64,
+        "z": -913
+      },
+      "timestamp": 1774365949045
     },
-    "timestamp": 1774351151038
-  },
-  "bed": {
-    "name": "bed",
-    "pos": {
-      "x": -1003,
-      "y": 75,
-      "z": -919
-    },
-    "timestamp": 1774351151048
-  },
-  "chest": {
-    "name": "chest",
-    "pos": {
-      "x": -1005,
-      "y": 75,
-      "z": -922
-    },
-    "timestamp": 1774351151057
-  },
-  "crafting_table": {
-    "name": "crafting_table",
-    "pos": {
-      "x": -1005,
-      "y": 75,
-      "z": -921
-    },
-    "timestamp": 1774352015974
-  },
-  "smithing_table": {
-    "name": "smithing_table",
-    "pos": {
-      "x": -8605,
-      "y": 64,
-      "z": 3020
-    },
-    "timestamp": 1774353920186
-  },
-  "furnace": {
-    "name": "furnace",
-    "pos": {
-      "x": -1162,
-      "y": 60,
-      "z": -729
-    },
-    "timestamp": 1774356089661
-  }
+    {
+      "name": "crafting_table",
+      "pos": {
+        "x": -1038,
+        "y": 64,
+        "z": -915
+      },
+      "timestamp": 1774366228569
+    }
+  ],
+  "smithing_table": [
+    {
+      "name": "smithing_table",
+      "pos": {
+        "x": -1060,
+        "y": 64,
+        "z": -912
+      },
+      "timestamp": 1774365949086
+    }
+  ],
+  "bed": [
+    {
+      "name": "bed",
+      "pos": {
+        "x": -1065,
+        "y": 65,
+        "z": -908
+      },
+      "timestamp": 1774365949156
+    }
+  ],
+  "village": [
+    {
+      "name": "village",
+      "pos": {
+        "x": -1037,
+        "y": 64,
+        "z": -915
+      },
+      "timestamp": 1774366089730
+    }
+  ]
 }

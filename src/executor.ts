@@ -9,11 +9,12 @@ import { executeBuild }   from './goals/build';
 import { executeCraft }   from './goals/craft';
 import { executeFarm }    from './goals/farm';
 import { executeSocial }  from './goals/social';
+import { executeCombat, shouldFight } from './goals/combat';
 import { getNearestHostile } from './data/mobs';
 import { log } from './utils/logger';
 
 export interface Goal {
-  goal: 'survive' | 'gather' | 'explore' | 'build' | 'craft' | 'smelt' | 'hunt' | 'social';
+  goal: 'survive' | 'gather' | 'explore' | 'build' | 'craft' | 'smelt' | 'hunt' | 'social' | 'combat';
   target: string;
   reason: string;
 }
@@ -37,11 +38,11 @@ export class Executor {
         case 'gather':  result = await executeGather(this.bot, goal.target);                   break;
         case 'explore': result = await executeExplore(this.bot, goal.target, this.world);      break;
         case 'build':   result = await executeBuild(this.bot, goal.target);                    break;
-        // smelt routes through executeCraft — craft.ts already handles smelting via executeSmelt internally
         case 'craft':
         case 'smelt':   result = await executeCraft(this.bot, goal.target);                    break;
         case 'hunt':    result = await executeFarm(this.bot, goal.target);                     break;
         case 'social':  result = await executeSocial(this.bot, goal.target, this.trust);       break;
+        case 'combat':  result = await executeCombat(this.bot, goal.target);                   break;
         default:        result = { success: false, reason: 'unknown goal type' };
       }
     } catch (err: any) {
@@ -72,13 +73,23 @@ export class Executor {
     const hp   = this.bot.health;
     const food = this.bot.food;
 
-    if (hp <= 4)                    return { goal: 'survive', target: 'flee', reason: 'critical health' };
-    if (hp <= 8 && food > 14)       return { goal: 'survive', target: 'flee', reason: 'low health flee' };
-    if (food <= 6)                  return { goal: 'survive', target: 'eat',  reason: 'starving'        };
-    if (hp <= 14 && food <= 14)     return { goal: 'survive', target: 'eat',  reason: 'eat to heal'     };
+    // Critical health — flee regardless
+    if (hp <= 4) return { goal: 'survive', target: 'flee', reason: 'critical health' };
 
+    // Starving — eat first
+    if (food <= 6) return { goal: 'survive', target: 'eat', reason: 'starving' };
+
+    // Low health — eat to regen if possible
+    if (hp <= 14 && food <= 14) return { goal: 'survive', target: 'eat', reason: 'eat to heal' };
+
+    // Hostile mob very close — fight or flee based on equipment
     const hostile = getNearestHostile(this.bot, 5);
-    if (hostile) return { goal: 'survive', target: 'flee', reason: `${hostile.name} too close` };
+    if (hostile) {
+      if (shouldFight(this.bot)) {
+        return { goal: 'combat', target: 'nearest', reason: `${hostile.name} attacking — fighting back` };
+      }
+      return { goal: 'survive', target: 'flee', reason: `${hostile.name} too close — unarmed` };
+    }
 
     return null;
   }

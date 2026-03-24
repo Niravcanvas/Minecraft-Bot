@@ -8,6 +8,7 @@ const build_1 = require("./goals/build");
 const craft_1 = require("./goals/craft");
 const farm_1 = require("./goals/farm");
 const social_1 = require("./goals/social");
+const combat_1 = require("./goals/combat");
 const mobs_1 = require("./data/mobs");
 const logger_1 = require("./utils/logger");
 class Executor {
@@ -39,7 +40,6 @@ class Executor {
                 case 'build':
                     result = await (0, build_1.executeBuild)(this.bot, goal.target);
                     break;
-                // smelt routes through executeCraft — craft.ts already handles smelting via executeSmelt internally
                 case 'craft':
                 case 'smelt':
                     result = await (0, craft_1.executeCraft)(this.bot, goal.target);
@@ -49,6 +49,9 @@ class Executor {
                     break;
                 case 'social':
                     result = await (0, social_1.executeSocial)(this.bot, goal.target, this.trust);
+                    break;
+                case 'combat':
+                    result = await (0, combat_1.executeCombat)(this.bot, goal.target);
                     break;
                 default: result = { success: false, reason: 'unknown goal type' };
             }
@@ -76,17 +79,23 @@ class Executor {
     emergency() {
         const hp = this.bot.health;
         const food = this.bot.food;
+        // Critical health — flee regardless
         if (hp <= 4)
             return { goal: 'survive', target: 'flee', reason: 'critical health' };
-        if (hp <= 8 && food > 14)
-            return { goal: 'survive', target: 'flee', reason: 'low health flee' };
+        // Starving — eat first
         if (food <= 6)
             return { goal: 'survive', target: 'eat', reason: 'starving' };
+        // Low health — eat to regen if possible
         if (hp <= 14 && food <= 14)
             return { goal: 'survive', target: 'eat', reason: 'eat to heal' };
+        // Hostile mob very close — fight or flee based on equipment
         const hostile = (0, mobs_1.getNearestHostile)(this.bot, 5);
-        if (hostile)
-            return { goal: 'survive', target: 'flee', reason: `${hostile.name} too close` };
+        if (hostile) {
+            if ((0, combat_1.shouldFight)(this.bot)) {
+                return { goal: 'combat', target: 'nearest', reason: `${hostile.name} attacking — fighting back` };
+            }
+            return { goal: 'survive', target: 'flee', reason: `${hostile.name} too close — unarmed` };
+        }
         return null;
     }
     nearbyHostileNames() {

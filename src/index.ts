@@ -6,6 +6,8 @@ import { Executor }       from './executor';
 import { LearningMemory } from './memory/learning';
 import { TrustMemory }    from './memory/trust';
 import { WorldMemory }    from './memory/world';
+import { parseChatIntent, intentToGoal, proactiveChat, buildBotContext } from './goals/chat';
+import { lookAround, lookAtNearestPlayer } from './utils/navigation';
 import { log }            from './utils/logger';
 
 const cfg = {
@@ -18,18 +20,20 @@ const cfg = {
   },
   ollamaUrl:    process.env.OLLAMA_URL    ?? 'http://localhost:11434',
   ollamaModel:  process.env.OLLAMA_MODEL  ?? 'qwen2.5:1.5b',
-  goalTickMs:   Number(process.env.GOAL_TICK_MS    ?? 30000),
-  safetyTickMs: Number(process.env.SAFETY_TICK_MS  ?? 1500),
+  goalTickMs:   Number(process.env.GOAL_TICK_MS    ?? 8000),
+  safetyTickMs: Number(process.env.SAFETY_TICK_MS  ?? 1000),
 };
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 async function main() {
   log.divider();
-  log.info(`🤖 Minecraft AI Bot v4`);
+  log.info(`🤖 Minecraft AI Bot v6`);
   log.info(`   Server : ${cfg.mc.host}:${cfg.mc.port}`);
   log.info(`   Model  : ${cfg.ollamaModel}`);
   log.divider();
 
-  const llm      = new OllamaClient(cfg.ollamaModel, cfg.ollamaUrl);
+  const llm = new OllamaClient(cfg.ollamaModel, cfg.ollamaUrl);
   if (!await llm.ping()) process.exit(1);
 
   const learning = new LearningMemory();
@@ -39,76 +43,140 @@ async function main() {
   const brain    = new Brain(bot, llm, learning, trust, world);
   const executor = new Executor(bot, learning, trust, world);
 
-  let running     = false;
-  let busy        = false;
+  let running = false;
+  let busy    = false;
 
   bot.once('spawn', () => {
     running = true;
 
-    // Safety loop — pure code, checks every 1.5s
+    // ─── Safety loop (1s) — emergency checks ──────────────────────────────
     setInterval(async () => {
       if (!running || busy) return;
       world.scan(bot);
       const emergency = executor.emergency();
-      if (emergency) { 
-        busy = true; 
-        const result = await executor.run(emergency); 
+      if (emergency) {
+        busy = true;
+        const result = await executor.run(emergency);
         brain.recordOutcome(emergency.goal, emergency.target, result.success, result.reason);
-        busy = false; 
+        busy = false;
       }
     }, cfg.safetyTickMs);
 
-    // Goal loop — runs next goal when bot is free
+    // ─── Look around behaviors ────────────────────────────────────────────
     setInterval(async () => {
       if (!running || busy) return;
-      busy = true;
-      try { 
-        const goal = await brain.pickGoal(); 
-        const result = await executor.run(goal); 
-        brain.recordOutcome(goal.goal, goal.target, result.success, result.reason);
-      }
-      catch (e: any) { log.error(`Goal error: ${e.message}`); }
-      busy = false;
-    }, cfg.goalTickMs);
+      try { await lookAtNearestPlayer(bot, 12); } catch {}
+    }, 3000);
 
-    // First goal after 4s
-    setTimeout(async () => {
+    setInterval(async () => {
+      if (!running || busy) return;
+      try { await lookAround(bot); } catch {}
+    }, 8000);
+
+    // ─── Auto-equip armor when inventory changes ──────────────────────────
+    bot.inventory.on('updateSlot' as any, async () => {
       if (busy) return;
-      busy = true;
-      try { 
-        const goal = await brain.pickGoal(); 
-        const result = await executor.run(goal); 
-        brain.recordOutcome(goal.goal, goal.target, result.success, result.reason);
+      // Check if we have unequipped armor pieces
+      const mcData = require('minecraft-data')(bot.version);
+      const ARMOUR_SLOTS: Array<{ slot: number; names: string[] }> = [
+        { slot: 5, names: ['helmet'] },
+        { slot: 6, names: ['chestplate'] },
+        { slot: 7, names: ['leggings'] },
+        { slot: 8, names: ['boots'] },
+      ];
+
+      for (const { slot, names } of ARMOUR_SLOTS) {
+        const current = (bot.inventory as any).slots[slot];
+        const candidate = bot.inventory.items().find(i =>
+          names.some(n => i.name.includes(n)) &&
+          (!current || i.type !== current.type)
+        );
+        if (candidate && !current) {
+          try {
+            const dest = slot === 5 ? 'head' : slot === 6 ? 'torso' : slot === 7 ? 'legs' : 'feet';
+            await bot.equip(candidate, dest as any);
+            log.success(`[auto-equip] Equipped ${candidate.name}`);
+          } catch {}
+        }
       }
-      catch (e: any) { log.error(e.message); }
-      busy = false;
-    }, 4000);
+    });
+
+    // ─── Event-driven goal loop ───────────────────────────────────────────
+    async function goalLoop() {
+      while (running) {
+        if (busy) { await sleep(500); continue; }
+        busy = true;
+        try {
+          const goal = await brain.pickGoal();
+          proactiveChat(bot, `${goal.goal}_${goal.target}`);
+          const result = await executor.run(goal);
+          brain.recordOutcome(goal.goal, goal.target, result.success, result.reason);
+        } catch (e: any) {
+          log.error(`Goal error: ${e.message}`);
+        }
+        busy = false;
+        await sleep(800);
+      }
+    }
+
+    setTimeout(() => goalLoop(), 4000);
   });
 
-  // Chat commands
-  bot.on('chat', (username, message) => {
-    if (username === bot.username || !message.startsWith('!')) return;
+  // ─── Smart Chat ─────────────────────────────────────────────────────────
+  bot.on('chat', async (username, message) => {
+    if (username === bot.username) return;
     trust.onChat(username, message);
     log.chat(username, message);
-    const cmd = message.slice(1).trim().toLowerCase();
-    switch (cmd) {
-      case 'stop':   running = false; bot.chat('Stopped.'); break;
-      case 'start':  running = true;  bot.chat('Running.'); break;
-      case 'status': bot.chat(`hp=${Math.round(bot.health)} food=${Math.round(bot.food)} model=${llm.getModel()}`); break;
-      case 'trust':  log.info(JSON.stringify(trust.players, null, 2)); bot.chat('Trust dumped.'); break;
-      case 'world':  bot.chat(`Known: ${world.summary()}`); break;
-      case 'inv':    bot.chat(`Inv: ${bot.inventory.items().slice(0,6).map(i => `${i.name}x${i.count}`).join(', ')}`); break;
-      default:       bot.chat(`Got it: "${cmd}"`);
+
+    if (message.startsWith('!')) {
+      const cmd = message.slice(1).trim().toLowerCase();
+      switch (cmd) {
+        case 'stop':   running = false; bot.chat('Stopped.'); break;
+        case 'start':  running = true;  bot.chat('Running.'); break;
+        case 'status': bot.chat(`hp=${Math.round(bot.health)} food=${Math.round(bot.food)}`); break;
+        case 'inv':    bot.chat(`Inv: ${bot.inventory.items().slice(0,8).map(i => `${i.name}x${i.count}`).join(', ')}`); break;
+        case 'world':  bot.chat(`Known: ${world.summary()}`); break;
+        default:       bot.chat(`Unknown: ${cmd}`);
+      }
+      return;
+    }
+
+    try {
+      const context = buildBotContext(bot);
+      const intent = await parseChatIntent(llm, username, message, context);
+      log.info(`[chat] intent=${intent.intent} goal=${intent.goal}(${intent.target}) reply="${intent.reply}"`);
+      if (intent.reply) bot.chat(intent.reply);
+      const goal = intentToGoal(intent);
+      if (goal) {
+        brain.pushPlayerGoal(goal);
+        log.info(`[chat] queued: ${goal.goal}(${goal.target})`);
+      }
+    } catch (e: any) {
+      log.error(`Chat error: ${e.message}`);
+      try {
+        const response = await llm.chat([
+          { role: 'system', content: 'You are a Minecraft bot. Be short and fun.' },
+          { role: 'user', content: `${username}: ${message}` },
+        ]);
+        bot.chat(response);
+      } catch {}
     }
   });
 
-  // Detect attacks
+  // ─── Detect player attacks ──────────────────────────────────────────────
   bot.on('entityHurt', (entity) => {
     if (entity !== bot.entity) return;
     const attacker = (Object.values(bot.entities) as any[]).find(e =>
       e.type === 'player' && e.position?.distanceTo(bot.entity.position) < 5
     );
     if (attacker?.username) { trust.onAttacked(attacker.username); log.warn(`${attacker.username} attacked me!`); }
+  });
+
+  // ─── Pick up items dropped near the bot ─────────────────────────────────
+  bot.on('playerCollect' as any, (collector: any, collected: any) => {
+    if (collector.username === bot.username) {
+      log.info(`[pickup] Collected item`);
+    }
   });
 
   process.on('SIGINT', () => { running = false; bot.quit(); process.exit(0); });

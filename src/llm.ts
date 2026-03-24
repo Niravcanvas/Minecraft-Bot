@@ -18,12 +18,13 @@ export class OllamaClient {
     } catch { log.error('Ollama unreachable. Is it running?'); return false; }
   }
 
-  async chat(messages: ChatMessage[]): Promise<string> {
+  async chat(messages: ChatMessage[], format?: string): Promise<string> {
     const res = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: this.model, messages, stream: false, format: 'json',
+        model: this.model, messages, stream: false,
+        ...(format && { format }),
         options: { temperature: 0.15, num_predict: 80, repeat_penalty: 1.1 },
       }),
     });
