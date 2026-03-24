@@ -4,26 +4,20 @@ import { log } from './logger';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const DEFAULT_NAV_TIMEOUT_MS = 30_000;   // was 15s — too short for open terrain
-const STUCK_CHECK_INTERVAL = 2_500;
-const STUCK_MIN_MOVE = 0.1;
-const STUCK_MAX_TICKS = 5;        // 5 × 2.5s = 12.5s before stuck
-const MAX_UNSTICK_ATTEMPTS = 4;        // try 4 recovery strategies before giving up
-const RECOVERY_BETWEEN_MS = 400;
+const DEFAULT_NAV_TIMEOUT_MS = 30_000;
+const STUCK_CHECK_INTERVAL   = 2_500;
+const STUCK_MIN_MOVE         = 0.1;
+const STUCK_MAX_TICKS        = 5;
+const MAX_UNSTICK_ATTEMPTS   = 4;
+const RECOVERY_BETWEEN_MS    = 400;
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
-
-// ─── Vec3 helper ─────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Vec3 = require('vec3');
 
 // ─── Stuck recovery ───────────────────────────────────────────────────────────
 
-/**
- * Multi-strategy unstick. Tries up to MAX_UNSTICK_ATTEMPTS different
- * approaches so the bot doesn't just give up after one jump.
- */
 async function unstick(bot: Bot, attempt = 0): Promise<void> {
   try {
     bot.clearControlStates();
@@ -31,7 +25,6 @@ async function unstick(bot: Bot, attempt = 0): Promise<void> {
 
     switch (attempt % MAX_UNSTICK_ATTEMPTS) {
 
-      // Strategy 0: Jump + random strafe
       case 0: {
         const dir = (['forward', 'back', 'left', 'right'] as const)[Math.floor(Math.random() * 4)];
         bot.setControlState('jump', true);
@@ -41,7 +34,6 @@ async function unstick(bot: Bot, attempt = 0): Promise<void> {
         break;
       }
 
-      // Strategy 1: Dig front face at eye + foot level
       case 1: {
         try {
           const pos = bot.entity.position;
@@ -60,11 +52,10 @@ async function unstick(bot: Bot, attempt = 0): Promise<void> {
               break;
             }
           }
-        } catch { /* block may not be diggable */ }
+        } catch { }
         break;
       }
 
-      // Strategy 2: Sprint backward + jump
       case 2: {
         bot.setControlState('back', true);
         bot.setControlState('jump', true);
@@ -74,8 +65,6 @@ async function unstick(bot: Bot, attempt = 0): Promise<void> {
         break;
       }
 
-      // Strategy 3: Dig the block BELOW us if we're sinking / half-buried,
-      //             then jump upward
       case 3: {
         try {
           const pos = bot.entity.position;
@@ -100,20 +89,16 @@ async function unstick(bot: Bot, attempt = 0): Promise<void> {
 
 // ─── Pathfinder settings ─────────────────────────────────────────────────────
 
-/**
- * Apply loose movement settings so the pathfinder doesn't refuse
- * routes that involve minor climbing, water, or light obstacles.
- */
 function applyMovements(bot: Bot): void {
   try {
     const moves = new Movements(bot);
-    moves.allowSprinting = true;
-    moves.canDig = true;
-    moves.digCost = 2;        // willing to dig but prefers to walk around
-    moves.maxDropDown = 4;        // allow small drops
-    moves.allow1by1towers = true;     // can pillar up 1 block
+    moves.allowSprinting    = true;
+    moves.canDig            = true;
+    moves.digCost           = 2;
+    moves.maxDropDown       = 4;
+    moves.allow1by1towers   = true;
     (bot as any).pathfinder.setMovements(moves);
-  } catch { /* pathfinder may not be loaded yet */ }
+  } catch { }
 }
 
 // ─── Core navigation ─────────────────────────────────────────────────────────
@@ -134,21 +119,21 @@ export async function navigateTo(
     : new goals.GoalXZ(x, z);
 
   return new Promise<boolean>(resolve => {
-    let lastPos = bot.entity.position.clone();
-    let stuckTicks = 0;
+    let lastPos      = bot.entity.position.clone();
+    let stuckTicks   = 0;
     let unstickCount = 0;
-    let done = false;
+    let noPathCount  = 0;   // FIX Bug #8: track noPath occurrences separately
+    let done         = false;
 
-    // Adaptive timeout — longer distances get more time
     const dist = bot.entity.position.distanceTo(new Vec3(x, y ?? bot.entity.position.y, z));
-    const adaptiveTimeout = Math.max(timeoutMs, Math.min(dist * 500, 90_000)); // up to 90s for far targets
+    const adaptiveTimeout = Math.max(timeoutMs, Math.min(dist * 500, 90_000));
 
     const timeout = setTimeout(() => { cleanup(); resolve(false); }, adaptiveTimeout);
 
     const stuckChecker = setInterval(async () => {
       if (done) return;
 
-      const cur = bot.entity.position;
+      const cur   = bot.entity.position;
       const moved = cur.distanceTo(lastPos);
 
       if (moved < STUCK_MIN_MOVE) {
@@ -159,7 +144,6 @@ export async function navigateTo(
           unstickCount++;
 
           if (unstickCount > MAX_UNSTICK_ATTEMPTS) {
-            // Exhausted all recovery strategies — give up
             log.warn('[nav] stuck — all recovery attempts failed');
             cleanup();
             resolve(false);
@@ -173,7 +157,6 @@ export async function navigateTo(
 
           if (done) return;
 
-          // Re-apply movements and restart pathfinding after each recovery
           applyMovements(bot);
           try {
             bot.pathfinder.setGoal(goal, true);
@@ -183,8 +166,7 @@ export async function navigateTo(
           }
         }
       } else {
-        // Moving — reset stuck counter and unstick counter
-        stuckTicks = 0;
+        stuckTicks   = 0;
         unstickCount = 0;
       }
 
@@ -192,31 +174,49 @@ export async function navigateTo(
     }, STUCK_CHECK_INTERVAL);
 
     function onReached() { cleanup(); resolve(true); }
-    function onFailed() { cleanup(); resolve(false); }
+    function onFailed()  { cleanup(); resolve(false); }
+
     function onPathUpdate(r: any) {
-      if (r.status === 'noPath') {
-        log.warn('[nav] no path to target');
-        // Don't immediately give up on noPath — terrain may update
-        // Only bail if we've also been stuck
-        if (unstickCount >= 2) {
-          cleanup();
-          resolve(false);
-        }
+      if (r.status !== 'noPath') return;
+
+      noPathCount++;
+
+      if (noPathCount === 1) {
+        // FIX Bug #8: on first noPath, try wandering to reposition then retry.
+        // Previously nothing happened on the first noPath — the bot silently
+        // burned through the full timeout (up to 90s) doing nothing useful.
+        log.warn('[nav] no path — trying wander reposition then retry');
+        wander(bot, 8, 3).then(() => {
+          if (done) return;
+          applyMovements(bot);
+          try {
+            bot.pathfinder.setGoal(goal, true);
+          } catch {
+            cleanup();
+            resolve(false);
+          }
+        });
+      } else {
+        // FIX Bug #8: second noPath after repositioning — path is genuinely
+        // blocked. Give up immediately rather than waiting for the timeout.
+        log.warn('[nav] no path after reposition, giving up');
+        cleanup();
+        resolve(false);
       }
     }
 
-    bot.once('goal_reached', onReached);
+    bot.once('goal_reached',         onReached);
     (bot as any).once('goal_failed', onFailed);
-    (bot as any).on('path_update', onPathUpdate);
+    (bot as any).on('path_update',   onPathUpdate);
 
     function cleanup() {
       if (done) return;
       done = true;
       clearTimeout(timeout);
       clearInterval(stuckChecker);
-      bot.removeListener('goal_reached', onReached);
-      (bot as any).removeListener('goal_failed', onFailed);
-      (bot as any).removeListener('path_update', onPathUpdate);
+      bot.removeListener('goal_reached',             onReached);
+      (bot as any).removeListener('goal_failed',     onFailed);
+      (bot as any).removeListener('path_update',     onPathUpdate);
       try { bot.pathfinder.setGoal(null); } catch { }
       bot.clearControlStates();
     }
@@ -241,21 +241,16 @@ export async function goToBlock(
   return navigateTo(bot, x, y, z, reach);
 }
 
-// ─── Wander — random nearby point, useful when fully stuck ───────────────────
+// ─── Wander ───────────────────────────────────────────────────────────────────
 
-/**
- * Walk to a random point within `radius` blocks.
- * Tries up to `attempts` different random targets before giving up.
- * Use this as a last-resort unstick when gather/explore keeps failing.
- */
 export async function wander(bot: Bot, radius = 20, attempts = 5): Promise<boolean> {
   const pos = bot.entity.position;
   for (let i = 0; i < attempts; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const dist = radius * 0.5 + Math.random() * radius * 0.5;
-    const tx = Math.round(pos.x + Math.cos(angle) * dist);
-    const tz = Math.round(pos.z + Math.sin(angle) * dist);
-    const ok = await navigateTo(bot, tx, null, tz, 3, 12_000);
+    const dist  = radius * 0.5 + Math.random() * radius * 0.5;
+    const tx    = Math.round(pos.x + Math.cos(angle) * dist);
+    const tz    = Math.round(pos.z + Math.sin(angle) * dist);
+    const ok    = await navigateTo(bot, tx, null, tz, 3, 12_000);
     if (ok) return true;
   }
   return false;
@@ -264,7 +259,7 @@ export async function wander(bot: Bot, radius = 20, attempts = 5): Promise<boole
 // ─── Head movement ────────────────────────────────────────────────────────────
 
 export async function lookAround(bot: Bot): Promise<void> {
-  const yaw = (Math.random() - 0.5) * Math.PI;
+  const yaw   = (Math.random() - 0.5) * Math.PI;
   const pitch = (Math.random() - 0.5) * 0.6;
   try { await bot.look(bot.entity.yaw + yaw, pitch, false); } catch { }
 }

@@ -57,17 +57,14 @@ function canSleep(bot, world) {
 function inv(bot, name) { return (0, items_1.hasItem)(bot, name); }
 function invAny(bot, names) { return (0, items_1.hasAny)(bot, names); }
 function count(bot, name) { return (0, items_1.countItem)(bot, name); }
-/** Check if bot has ANY type of log */
 function hasAnyLogs(bot) {
     return bot.inventory.items().some(i => i.name.includes('_log'));
 }
-/** Count ALL logs regardless of wood type */
 function totalLogCount(bot) {
     return bot.inventory.items()
         .filter(i => i.name.includes('_log'))
         .reduce((s, i) => s + i.count, 0);
 }
-/** Check if bot has ANY type of planks */
 function hasAnyPlanks(bot) {
     return bot.inventory.items().some(i => i.name.includes('_planks'));
 }
@@ -76,7 +73,6 @@ function totalPlanksCount(bot) {
         .filter(i => i.name.includes('_planks'))
         .reduce((s, i) => s + i.count, 0);
 }
-/** Check BEST pickaxe tier the bot currently has */
 function bestPickaxeTier(bot) {
     const items = bot.inventory.items().map(i => i.name);
     if (items.some(n => n === 'diamond_pickaxe' || n === 'netherite_pickaxe'))
@@ -87,7 +83,7 @@ function bestPickaxeTier(bot) {
         return 1;
     if (items.some(n => n.includes('pickaxe')))
         return 0;
-    return -1; // No pickaxe at all
+    return -1;
 }
 function hasSword(bot) {
     return bot.inventory.items().some(i => i.name.includes('sword'));
@@ -118,7 +114,6 @@ function hasAnyArmor(bot) {
     return bot.inventory.items().some(i => i.name.includes('helmet') || i.name.includes('chestplate') ||
         i.name.includes('leggings') || i.name.includes('boots'));
 }
-/** Check if bot has any UNEQUIPPED armor in inventory */
 function hasUnequippedArmor(bot) {
     const equipped = new Set();
     for (let slot = 5; slot <= 8; slot++) {
@@ -154,7 +149,10 @@ function detectPhase(bot) {
 const LOOP_WINDOW_MS = 120_000;
 const LOOP_THRESHOLD = 3;
 const SUPPRESS_MS = 90_000;
-const FLEE_SAFE_COOLDOWN_MS = 30_000;
+// FIX Bug #5: was 30_000 — too long. Bot would re-enter danger area within
+// 30s during explore/gather and be unable to flee again. 5s is enough to
+// prevent flip-flopping without blocking legitimate re-flee.
+const FLEE_SAFE_COOLDOWN_MS = 5_000;
 // ─── Brain ────────────────────────────────────────────────────────────────────
 class Brain {
     bot;
@@ -185,10 +183,9 @@ class Brain {
     recordOutcome(goal, target, success, reason) {
         const key = `${goal}:${target}`;
         if (success) {
-            if (goal === 'survive' && target === 'flee' && reason.includes('safe'))
+            if (goal === 'survive' && target === 'flee')
                 this.fleeSafeUntil = Date.now() + FLEE_SAFE_COOLDOWN_MS;
             this.suppressed.delete(key);
-            // If we just gathered wood, un-suppress everything that depends on it
             if (goal === 'gather' && target === 'wood') {
                 this.suppressed.delete('craft:crafting_table');
                 this.suppressed.delete('craft:wooden_pickaxe');
@@ -207,7 +204,11 @@ class Brain {
             this.failHistory = this.failHistory.filter(r => !(r.goal === goal && r.target === target));
         }
     }
-    isSuppressed(goal, target) {
+    // FIX Bug #12: split into two methods so we can check BOTH suppression
+    // sources — Brain's own failHistory AND LearningMemory's 5-min window.
+    // Previously only Brain's map was checked; goals suppressed by LearningMemory
+    // were still attempted (and vice versa), giving inconsistent blacklisting.
+    isSuppressedByBrain(goal, target) {
         const until = this.suppressed.get(`${goal}:${target}`);
         if (!until)
             return false;
@@ -216,6 +217,10 @@ class Brain {
             return false;
         }
         return true;
+    }
+    isSuppressed(goal, target) {
+        // FIX Bug #12: check both suppression systems
+        return this.isSuppressedByBrain(goal, target) || this.learning.isSuppressed(goal, target);
     }
     // ── Main entry ────────────────────────────────────────────────────────────
     async pickGoal() {
@@ -238,6 +243,19 @@ class Brain {
             return det;
         }
         // 2. Strategy queue
+        // FIX Bug #7: when queue is empty, rebuild from unachieved goals before
+        // falling to the LLM tier. Previously the queue was never refilled until
+        // a phase transition, causing aimless wandering when all queued goals were
+        // either achieved or popped.
+        if (this.strategyQueue.length === 0) {
+            const rebuilt = (strategies_1.STRATEGIES[this.currentPhase] ?? []).filter(g => !this.alreadyAchieved(g) &&
+                !this.isSuppressed(g.goal, g.target) &&
+                this.canAttempt(g));
+            if (rebuilt.length > 0) {
+                this.strategyQueue = rebuilt;
+                logger_1.log.brain(`[queue] rebuilt ${rebuilt.length} goals for ${this.currentPhase}`);
+            }
+        }
         while (this.strategyQueue.length > 0) {
             const next = this.strategyQueue[0];
             if (this.alreadyAchieved(next) || this.isSuppressed(next.goal, next.target) || !this.canAttempt(next)) {
@@ -300,16 +318,25 @@ class Brain {
             if (woolCount(this.bot) < 3)
                 return { goal: 'hunt', target: 'sheep', reason: 'need wool for bed' };
         }
-        // ── 4. Basic wood (only if truly empty) ──
-        if (!hasAnyLogs(this.bot) && !hasAnyPlanks(this.bot))
-            return { goal: 'gather', target: 'wood', reason: 'no wood at all' };
+        // ── 4. Wood stock check ──
+        // FIX Bug #6: was only triggered on absolute zero (no logs AND no planks).
+        // Bot would try to craft a pickaxe with 1 plank and fail, then get
+        // suppressed, then wander aimlessly. Now triggers if stock is critically
+        // low so the bot proactively tops up before it runs dry.
+        const logCount = totalLogCount(this.bot);
+        const plankCount = totalPlanksCount(this.bot);
+        if (logCount < 4 && plankCount < 8) {
+            return {
+                goal: 'gather', target: 'wood',
+                reason: logCount === 0 && plankCount === 0
+                    ? 'no wood at all'
+                    : `low wood (${logCount} logs, ${plankCount} planks)`,
+            };
+        }
         // ── 5. Crafting table ──
         if (!inv(this.bot, 'crafting_table') && !this.world.knows('crafting_table')) {
-            // Need 4 planks = 1 log minimum
-            if (hasAnyLogs(this.bot) || totalPlanksCount(this.bot) >= 4) {
+            if (hasAnyLogs(this.bot) || totalPlanksCount(this.bot) >= 4)
                 return { goal: 'craft', target: 'crafting_table', reason: 'need crafting table' };
-            }
-            // No materials — gather wood first
             return { goal: 'gather', target: 'wood', reason: 'need logs for crafting table' };
         }
         // ── 6. Pickaxe — ONLY if we don't have one at all ──
@@ -343,7 +370,7 @@ class Brain {
         const hasCoal = count(this.bot, 'coal') > 0 || count(this.bot, 'charcoal') > 0;
         if (!hasCoal)
             return { goal: 'gather', target: 'coal', reason: 'need fuel' };
-        // ── 12. Iron progression (only if we don't already have iron pickaxe) ──
+        // ── 12. Iron progression ──
         const hasRawIron = count(this.bot, 'raw_iron') > 0;
         if (bestPickaxeTier(this.bot) < 2) {
             if (count(this.bot, 'iron_ingot') >= 3)
@@ -372,7 +399,6 @@ class Brain {
     // ── Already achieved ─────────────────────────────────────────────────────
     alreadyAchieved(goal) {
         if (goal.goal === 'craft') {
-            // Tool crafting: skip if we already have same or better tier
             if (goal.target.includes('pickaxe')) {
                 const tier = goal.target.startsWith('wooden') ? 0 :
                     goal.target.startsWith('stone') ? 1 :
@@ -386,7 +412,6 @@ class Brain {
                 return bestSwordTier(this.bot) >= tier;
             }
             if (goal.target.includes('axe')) {
-                // Skip if we have any axe already
                 return this.bot.inventory.items().some(i => i.name.includes('_axe'));
             }
             return inv(this.bot, goal.target);
@@ -394,7 +419,6 @@ class Brain {
         if (goal.goal === 'gather') {
             const thresholds = { wood: 16, stone: 16, coal: 8, iron: 12, food: 8 };
             const threshold = thresholds[goal.target] ?? 1;
-            // Check all possible item names for this gather target
             if (goal.target === 'wood')
                 return totalLogCount(this.bot) >= threshold || totalPlanksCount(this.bot) >= threshold;
             return count(this.bot, goal.target) >= threshold;
@@ -418,12 +442,10 @@ class Brain {
             const planks = totalPlanksCount(this.bot);
             const cob = this.bot.inventory.items()
                 .filter(i => i.name === 'cobblestone').reduce((s, i) => s + i.count, 0);
-            // These only need logs/planks (2×2 grid, no table required)
             if (goal.target === 'crafting_table')
                 return logs >= 1 || planks >= 4;
             if (goal.target === 'wooden_planks')
                 return logs >= 1;
-            // Everything else needs a crafting table AND materials
             const hasCraftingTable = inv(this.bot, 'crafting_table') || this.world.knows('crafting_table');
             if (!hasCraftingTable)
                 return false;
@@ -478,7 +500,6 @@ class Brain {
         if (!parsed.goal || !parsed.target)
             throw new Error('malformed');
         parsed.reason = parsed.reason ?? '';
-        // Validate goal type
         const validGoals = new Set(['survive', 'gather', 'craft', 'smelt', 'hunt', 'explore', 'build', 'combat', 'social']);
         if (!validGoals.has(parsed.goal))
             throw new Error(`invalid goal: ${parsed.goal}`);
@@ -486,14 +507,12 @@ class Brain {
     }
     // ── Fallback ─────────────────────────────────────────────────────────────
     fallback() {
-        // If we have literally nothing, gathering wood is always the answer
         if (!hasAnyLogs(this.bot) && !hasAnyPlanks(this.bot)) {
             if (!this.isSuppressed('gather', 'wood')) {
                 logger_1.log.brain(`[fallback] no materials — gather wood`);
                 return { goal: 'gather', target: 'wood', reason: 'need logs' };
             }
         }
-        // Try village if we discovered one and are stuck
         if (this.world.knows('village') && !this.isSuppressed('explore', 'village')) {
             logger_1.log.brain(`[fallback] heading to known village`);
             return { goal: 'explore', target: 'village', reason: 'use village resources' };
@@ -501,8 +520,7 @@ class Brain {
         const queue = strategies_1.STRATEGIES[this.currentPhase] ?? [];
         const unachieved = queue.filter(g => !this.alreadyAchieved(g) &&
             !this.isSuppressed(g.goal, g.target) &&
-            this.canAttempt(g) // <-- ADD THIS — was missing before
-        );
+            this.canAttempt(g));
         if (unachieved.length > 0) {
             this.strategyQueue = [...unachieved];
             const next = this.strategyQueue.shift();

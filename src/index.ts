@@ -9,6 +9,9 @@ import { WorldMemory }    from './memory/world';
 import { parseChatIntent, intentToGoal, proactiveChat, buildBotContext } from './goals/chat';
 import { lookAround, lookAtNearestPlayer } from './utils/navigation';
 import { log }            from './utils/logger';
+// FIX Bug #3: import interrupt flag so the safety loop can signal long-running
+// goals (especially smelt) to abort early when an emergency fires.
+import { setInterrupt }   from './interrupt';
 
 const cfg = {
   mc: {
@@ -43,30 +46,37 @@ async function main() {
   const brain    = new Brain(bot, llm, learning, trust, world);
   const executor = new Executor(bot, learning, trust, world);
 
-  let running = false;
-  // FIX: split busy into two flags — one for emergency, one for goal loop
-  // This prevents emergency checks from blocking the goal loop and vice versa
+  let running       = false;
   let emergencyBusy = false;
   let goalBusy      = false;
 
   bot.once('spawn', () => {
     running = true;
 
-    // ─── Safety loop (1s) — emergency checks ──────────────────────────────
+    // ─── Safety loop ──────────────────────────────────────────────────────
+    // FIX Bug #1: removed `|| goalBusy` from the guard. Previously any active
+    // goal (smelting, exploring, building — up to 90s) completely blocked the
+    // emergency check. The bot could die from a creeper or starve while
+    // waiting for furnace output and never react.
     setInterval(async () => {
-      if (!running || emergencyBusy || goalBusy) return;
+      if (!running || emergencyBusy) return;   // goalBusy intentionally removed
       world.scan(bot);
       const emergency = executor.emergency();
       if (!emergency) return;
 
       emergencyBusy = true;
-      // FIX: try/finally so busy is ALWAYS reset even if executor.run throws
+      // FIX Bug #3: signal any long-running goal (smelt etc.) to abort early,
+      // give it one tick to see the flag, then run the emergency.
+      setInterrupt(true);
+      await sleep(100);
+
       try {
         const result = await executor.run(emergency);
         brain.recordOutcome(emergency.goal, emergency.target, result.success, result.reason);
       } catch (e: any) {
         log.error(`Emergency error: ${e.message}`);
       } finally {
+        setInterrupt(false);   // FIX Bug #3: always clear interrupt after emergency
         emergencyBusy = false;
       }
     }, cfg.safetyTickMs);
@@ -85,7 +95,6 @@ async function main() {
     // ─── Auto-equip armor when inventory changes ──────────────────────────
     bot.inventory.on('updateSlot' as any, async () => {
       if (goalBusy) return;
-      const mcData = require('minecraft-data')(bot.version);
       const ARMOUR_SLOTS: Array<{ slot: number; names: string[] }> = [
         { slot: 5, names: ['helmet'] },
         { slot: 6, names: ['chestplate'] },
@@ -94,7 +103,7 @@ async function main() {
       ];
 
       for (const { slot, names } of ARMOUR_SLOTS) {
-        const current = (bot.inventory as any).slots[slot];
+        const current   = (bot.inventory as any).slots[slot];
         const candidate = bot.inventory.items().find(i =>
           names.some(n => i.name.includes(n)) &&
           (!current || i.type !== current.type)
@@ -109,14 +118,12 @@ async function main() {
       }
     });
 
-    // ─── Event-driven goal loop ───────────────────────────────────────────
+    // ─── Goal loop ────────────────────────────────────────────────────────
     async function goalLoop() {
       while (running) {
-        // FIX: wait for emergency to clear too, and use shorter sleep
         if (goalBusy || emergencyBusy) { await sleep(200); continue; }
 
         goalBusy = true;
-        // FIX: try/finally so goalBusy is ALWAYS reset — this was the main freeze bug
         try {
           const goal = await brain.pickGoal();
           proactiveChat(bot, `${goal.goal}_${goal.target}`);
@@ -127,11 +134,14 @@ async function main() {
         } finally {
           goalBusy = false;
         }
-        await sleep(500);
+
+        // FIX Bug #2: was hardcoded `await sleep(500)` which ignored the
+        // GOAL_TICK_MS env var entirely. Now uses the configured value so
+        // the bot doesn't spam goals every 500ms regardless of config.
+        await sleep(cfg.goalTickMs);
       }
     }
 
-    // FIX: reduced initial delay from 4000ms to 1500ms — bot was idle for 4s on spawn
     setTimeout(() => goalLoop(), 1500);
   });
 
@@ -149,20 +159,19 @@ async function main() {
         case 'status': bot.chat(`hp=${Math.round(bot.health)} food=${Math.round(bot.food)} busy=${goalBusy}`); break;
         case 'inv':    bot.chat(`Inv: ${bot.inventory.items().slice(0,8).map(i => `${i.name}x${i.count}`).join(', ')}`); break;
         case 'world':  bot.chat(`Known: ${world.summary()}`); break;
-        // FIX: added !follow command as direct shortcut bypassing LLM
         case 'follow': {
           brain.pushPlayerGoal({ goal: 'social', target: 'follow_trusted', reason: `${username} asked` });
           bot.chat(`Following you, ${username}!`);
           break;
         }
-        default:       bot.chat(`Unknown: ${cmd}`);
+        default: bot.chat(`Unknown: ${cmd}`);
       }
       return;
     }
 
     try {
       const context = buildBotContext(bot);
-      const intent = await parseChatIntent(llm, username, message, context);
+      const intent  = await parseChatIntent(llm, username, message, context);
       log.info(`[chat] intent=${intent.intent} goal=${intent.goal}(${intent.target}) reply="${intent.reply}"`);
       if (intent.reply) bot.chat(intent.reply);
       const goal = intentToGoal(intent);
@@ -175,7 +184,7 @@ async function main() {
       try {
         const response = await llm.chat([
           { role: 'system', content: 'You are a Minecraft bot. Be short and fun.' },
-          { role: 'user', content: `${username}: ${message}` },
+          { role: 'user',   content: `${username}: ${message}` },
         ]);
         bot.chat(response);
       } catch {}
@@ -188,14 +197,15 @@ async function main() {
     const attacker = (Object.values(bot.entities) as any[]).find(e =>
       e.type === 'player' && e.position?.distanceTo(bot.entity.position) < 5
     );
-    if (attacker?.username) { trust.onAttacked(attacker.username); log.warn(`${attacker.username} attacked me!`); }
+    if (attacker?.username) {
+      trust.onAttacked(attacker.username);
+      log.warn(`${attacker.username} attacked me!`);
+    }
   });
 
-  // ─── Pick up items dropped near the bot ─────────────────────────────────
-  bot.on('playerCollect' as any, (collector: any, _collected: any) => {
-    if (collector.username === bot.username) {
-      log.info(`[pickup] Collected item`);
-    }
+  // ─── Pick up items ───────────────────────────────────────────────────────
+  bot.on('playerCollect' as any, (collector: any) => {
+    if (collector.username === bot.username) log.info(`[pickup] Collected item`);
   });
 
   process.on('SIGINT', () => { running = false; bot.quit(); process.exit(0); });

@@ -20,12 +20,20 @@ export class OllamaClient {
 
   async chat(messages: ChatMessage[], format?: string): Promise<string> {
     const res = await fetch(`${this.baseUrl}/api/chat`, {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: this.model, messages, stream: false,
         ...(format && { format }),
-        options: { temperature: 0.15, num_predict: 80, repeat_penalty: 1.1 },
+        options: {
+          temperature:    0.15,
+          // FIX Bug #13: was 80 — barely enough for a full goal JSON (~45-70
+          // tokens). Any model preamble or longer target name like
+          // 'iron_chestplate' pushed it over, truncating mid-stream and
+          // causing a JSON parse failure. 150 gives plenty of headroom.
+          num_predict:    150,
+          repeat_penalty: 1.1,
+        },
       }),
     });
     if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);

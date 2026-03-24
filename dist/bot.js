@@ -14,7 +14,6 @@ function createBot(cfg) {
         version: cfg.version, auth: 'offline',
     });
     bot.loadPlugin(mineflayer_pathfinder_1.pathfinder);
-    // Load PvP plugin
     try {
         const { plugin: pvp } = require('mineflayer-pvp');
         bot.loadPlugin(pvp);
@@ -24,7 +23,6 @@ function createBot(cfg) {
         logger_1.log.warn('mineflayer-pvp not available — combat will use manual attacks');
     }
     bot.once('spawn', async () => {
-        // Configure pathfinder movements
         const mcData = require('minecraft-data')(bot.version);
         const movements = new mineflayer_pathfinder_1.Movements(bot);
         movements.canDig = true;
@@ -42,10 +40,36 @@ function createBot(cfg) {
         logger_1.log.info(`Version: ${bot.version}`);
         logger_1.log.divider();
         if (cfg.password) {
-            await sleep(2000);
+            // FIX Bug #14: old code used fixed sleeps (2000ms + 1500ms) which fired
+            // /register before the server's auth prompt arrived on slow/loaded
+            // servers, causing the commands to be silently ignored and the bot to
+            // never authenticate.
+            //
+            // New approach: wait for the server to actually send a chat message
+            // containing "register", "login", or "password" before responding.
+            // Falls back to an 8s timeout if the server never sends a prompt
+            // (e.g. a server that uses a different auth plugin).
+            await new Promise(resolve => {
+                const handler = (_username, message) => {
+                    const lower = message.toLowerCase();
+                    if (lower.includes('register') ||
+                        lower.includes('login') ||
+                        lower.includes('password') ||
+                        lower.includes('authenticate')) {
+                        bot.removeListener('chat', handler);
+                        resolve();
+                    }
+                };
+                bot.on('chat', handler);
+                // Safety fallback — don't wait forever if server has no auth prompt
+                setTimeout(() => {
+                    bot.removeListener('chat', handler);
+                    resolve();
+                }, 8000);
+            });
             logger_1.log.info('Sending /register...');
             bot.chat(`/register ${cfg.password} ${cfg.password}`);
-            await sleep(1500);
+            await sleep(2000); // give server time to process register before login
             logger_1.log.info('Sending /login...');
             bot.chat(`/login ${cfg.password}`);
             await sleep(1000);
@@ -58,7 +82,6 @@ function createBot(cfg) {
             bot.respawn();
         }
         catch { }
-        // Try /grave after respawn to recover items
         setTimeout(() => {
             logger_1.log.info('Running /grave to recover items...');
             bot.chat('/grave');
