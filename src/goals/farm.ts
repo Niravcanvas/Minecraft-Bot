@@ -1,7 +1,7 @@
 import { Bot } from 'mineflayer';
 import { getNearestPassive, FOOD_MOB_NAMES } from '../data/mobs';
 import { getBestTool } from '../data/items';
-import { navigateTo } from '../utils/navigation';
+import { navigateTo, stopNavigation } from '../utils/navigation';
 import { log } from '../utils/logger';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -58,7 +58,7 @@ export async function executeFarm(
       }
     }
 
-    bot.pathfinder.setGoal(null);
+    stopNavigation(bot);
 
     if (totalKills === 0) return { success: false, reason: `no ${target} found or killed`, gained: 0 };
 

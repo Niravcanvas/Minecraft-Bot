@@ -298,19 +298,20 @@ export class Brain {
       return next;
     }
 
-    // 3. LLM (rate-limited 30s — reduced from 15s to cut lag)
-    if (this.llm.isAvailable() && Date.now() - this.lastLLMCall > 30_000) {
-      this.lastLLMCall = Date.now();
-      try {
-        const goal = await this.llmGoal();
-        if (!this.isSuppressed(goal.goal, goal.target)) {
-          log.brain(`[llm] ${goal.goal}(${goal.target}) — ${goal.reason}`);
-          return goal;
-        }
-      } catch (err: any) { log.warn(`LLM failed: ${err.message}`); }
-    }
+    // LLM step DISABLED — running deterministic-only mode
+    // To re-enable: remove the comment from the block below
+    // if (this.llm.isAvailable() && Date.now() - this.lastLLMCall > 30_000) {
+    //   this.lastLLMCall = Date.now();
+    //   try {
+    //     const goal = await this.llmGoal();
+    //     if (!this.isSuppressed(goal.goal, goal.target)) {
+    //       log.brain(`[llm] ${goal.goal}(${goal.target}) — ${goal.reason}`);
+    //       return goal;
+    //     }
+    //   } catch (err: any) { log.warn(`LLM failed: ${err.message}`); }
+    // }
 
-    // 4. Fallback — never idle
+    // Fallback — always productive, never idle
     return this.fallback();
   }
 
@@ -560,35 +561,48 @@ export class Brain {
     return parsed;
   }
 
-  // ── Fallback ─────────────────────────────────────────────────────────────
+  // ── Fallback — always productive, never idle ──────────────────────────────
 
   private fallback(): Goal {
-    if (!hasAnyLogs(this.bot) && !hasAnyPlanks(this.bot)) {
-      if (!this.isSuppressed('gather', 'wood')) {
-        log.brain(`[fallback] no materials — gather wood`);
-        return { goal: 'gather', target: 'wood', reason: 'need logs' };
+    // Priority checklist — the bot always has something to do
+    const checks: Array<{ goal: string; target: string; reason: string; cond: () => boolean }> = [
+      // 1. Always need wood
+      { goal: 'gather', target: 'wood', reason: 'need more logs',
+        cond: () => totalLogCount(this.bot) < 16 && totalPlanksCount(this.bot) < 16 },
+      // 2. Need stone for tools
+      { goal: 'gather', target: 'stone', reason: 'need cobblestone',
+        cond: () => count(this.bot, 'cobblestone') < 16 && bestPickaxeTier(this.bot) >= 0 },
+      // 3. Need food to survive
+      { goal: 'hunt', target: 'cow', reason: 'need food',
+        cond: () => !hasFood(this.bot) },
+      // 4. Need coal for torches and smelting
+      { goal: 'gather', target: 'coal', reason: 'need fuel',
+        cond: () => count(this.bot, 'coal') < 8 && count(this.bot, 'charcoal') < 4 && bestPickaxeTier(this.bot) >= 0 },
+      // 5. Need iron for progression
+      { goal: 'gather', target: 'iron', reason: 'need iron ore',
+        cond: () => count(this.bot, 'iron_ingot') < 12 && count(this.bot, 'raw_iron') < 6 && bestPickaxeTier(this.bot) >= 1 },
+      // 6. Smelt iron if we have raw
+      { goal: 'smelt', target: 'iron_ingot', reason: 'smelt raw iron',
+        cond: () => count(this.bot, 'raw_iron') >= 3 && (count(this.bot, 'coal') > 0 || count(this.bot, 'charcoal') > 0) },
+      // 7. Hunt for food stockpile
+      { goal: 'hunt', target: 'cow', reason: 'stockpile food',
+        cond: () => this.bot.food <= 14 },
+      // 8. Build shelter if we have materials
+      { goal: 'build', target: 'shelter', reason: 'build base',
+        cond: () => count(this.bot, 'cobblestone') >= 32 && hasAnyLogs(this.bot) && !this.world.knows('shelter') },
+      // 9. Explore for resources
+      { goal: 'explore', target: 'any', reason: 'find new resources',
+        cond: () => true },   // always valid
+    ];
+
+    for (const c of checks) {
+      if (c.cond() && !this.isSuppressed(c.goal, c.target)) {
+        log.brain(`[fallback] ${c.goal}(${c.target}) — ${c.reason}`);
+        return { goal: c.goal as Goal['goal'], target: c.target, reason: c.reason };
       }
     }
 
-    if (this.world.knows('village') && !this.isSuppressed('explore', 'village')) {
-      log.brain(`[fallback] heading to known village`);
-      return { goal: 'explore', target: 'village', reason: 'use village resources' };
-    }
-
-    const queue = STRATEGIES[this.currentPhase] ?? [];
-    const unachieved = queue.filter(g =>
-      !this.alreadyAchieved(g) &&
-      !this.isSuppressed(g.goal, g.target) &&
-      this.canAttempt(g)
-    );
-
-    if (unachieved.length > 0) {
-      this.strategyQueue = [...unachieved];
-      const next = this.strategyQueue.shift()!;
-      log.brain(`[fallback] reset queue → ${next.goal}(${next.target})`);
-      return next;
-    }
-
+    // Absolute last resort — explore
     log.brain(`[fallback] exploring`);
     return { goal: 'explore', target: 'any', reason: 'roaming' };
   }

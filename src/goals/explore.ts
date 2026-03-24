@@ -1,5 +1,4 @@
 import { Bot }        from 'mineflayer';
-import { goals }      from 'mineflayer-pathfinder';
 import { WorldMemory } from '../memory/world';
 import { navigateTo, goToBlock } from '../utils/navigation';
 import { log }         from '../utils/logger';

@@ -1,104 +1,28 @@
 import { Bot } from 'mineflayer';
-import { goals, Movements } from 'mineflayer-pathfinder';
 import { log } from './logger';
 
-// ─── Config ──────────────────────────────────────────────────────────────────
+// ─── Baritone goals ──────────────────────────────────────────────────────────
 
-const DEFAULT_NAV_TIMEOUT_MS = 30_000;
-const STUCK_CHECK_INTERVAL   = 2_500;
-const STUCK_MIN_MOVE         = 0.1;
-const STUCK_MAX_TICKS        = 5;
-const MAX_UNSTICK_ATTEMPTS   = 4;
-const RECOVERY_BETWEEN_MS    = 400;
-
-const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+const baritone = require('@miner-org/mineflayer-baritone');
+const goals    = baritone.goals;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Vec3 = require('vec3');
 
-// ─── Stuck recovery ───────────────────────────────────────────────────────────
+// ─── Config ──────────────────────────────────────────────────────────────────
 
-async function unstick(bot: Bot, attempt = 0): Promise<void> {
-  try {
-    bot.clearControlStates();
-    await sleep(RECOVERY_BETWEEN_MS);
+const DEFAULT_NAV_TIMEOUT_MS = 15_000;
+const STUCK_CHECK_INTERVAL   = 3_000;
+const STUCK_MIN_MOVE         = 0.1;
+const STUCK_MAX_TICKS        = 4;
+const MAX_STUCK_RESETS       = 3;
 
-    switch (attempt % MAX_UNSTICK_ATTEMPTS) {
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
-      case 0: {
-        const dir = (['forward', 'back', 'left', 'right'] as const)[Math.floor(Math.random() * 4)];
-        bot.setControlState('jump', true);
-        bot.setControlState(dir, true);
-        await sleep(700);
-        bot.clearControlStates();
-        break;
-      }
+// ─── Ashfinder helper ────────────────────────────────────────────────────────
 
-      case 1: {
-        try {
-          const pos = bot.entity.position;
-          const yaw = bot.entity.yaw;
-          const dx = -Math.sin(yaw);
-          const dz = Math.cos(yaw);
-          const fx = Math.round(pos.x + dx);
-          const fz = Math.round(pos.z + dz);
-
-          for (const yOff of [0, 1, -1]) {
-            const blockPos = new Vec3(fx, Math.floor(pos.y) + yOff, fz);
-            const block = bot.blockAt(blockPos);
-            if (block && block.type !== 0 && block.name !== 'bedrock') {
-              await bot.dig(block);
-              log.info('[nav] Dug blocking block to unstick');
-              break;
-            }
-          }
-        } catch { }
-        break;
-      }
-
-      case 2: {
-        bot.setControlState('back', true);
-        bot.setControlState('jump', true);
-        bot.setControlState('sprint', true);
-        await sleep(900);
-        bot.clearControlStates();
-        break;
-      }
-
-      case 3: {
-        try {
-          const pos = bot.entity.position;
-          const below = bot.blockAt(new Vec3(Math.floor(pos.x), Math.floor(pos.y) - 1, Math.floor(pos.z)));
-          if (below && below.type !== 0 && below.name !== 'bedrock') {
-            await bot.dig(below);
-            log.info('[nav] Dug block below to unstick');
-          }
-        } catch { }
-        bot.setControlState('jump', true);
-        await sleep(500);
-        bot.clearControlStates();
-        break;
-      }
-    }
-
-    await sleep(RECOVERY_BETWEEN_MS);
-  } catch {
-    bot.clearControlStates();
-  }
-}
-
-// ─── Pathfinder settings ─────────────────────────────────────────────────────
-
-function applyMovements(bot: Bot): void {
-  try {
-    const moves = new Movements(bot);
-    moves.allowSprinting    = true;
-    moves.canDig            = true;
-    moves.digCost           = 2;
-    moves.maxDropDown       = 4;
-    moves.allow1by1towers   = true;
-    (bot as any).pathfinder.setMovements(moves);
-  } catch { }
+function ash(bot: Bot): any {
+  return (bot as any).ashfinder;
 }
 
 // ─── Core navigation ─────────────────────────────────────────────────────────
@@ -112,122 +36,97 @@ export async function navigateTo(
   timeoutMs = DEFAULT_NAV_TIMEOUT_MS,
 ): Promise<boolean> {
 
-  applyMovements(bot);
+  const targetPos = new Vec3(x, y ?? bot.entity.position.y, z);
+  const dist = bot.entity.position.distanceTo(targetPos);
+
+  // Already close enough
+  if (dist <= reach) return true;
+
+  // Adaptive timeout — far targets get more time
+  const adaptiveTimeout = Math.max(timeoutMs, Math.min(dist * 500, 90_000));
 
   const goal = y !== null
-    ? new goals.GoalNear(x, y, z, Math.max(2, reach))
-    : new goals.GoalXZ(x, z);
+    ? new goals.GoalNear(targetPos, Math.max(2, reach))
+    : new goals.GoalXZ(targetPos);
 
-  return new Promise<boolean>(resolve => {
-    let lastPos      = bot.entity.position.clone();
-    let stuckTicks   = 0;
-    let unstickCount = 0;
-    let noPathCount  = 0;   // FIX Bug #8: track noPath occurrences separately
-    let done         = false;
+  let done = false;
+  let stuckTicks = 0;
+  let stuckResets = 0;
+  let lastPos = bot.entity.position.clone();
 
-    const dist = bot.entity.position.distanceTo(new Vec3(x, y ?? bot.entity.position.y, z));
-    const adaptiveTimeout = Math.max(timeoutMs, Math.min(dist * 500, 90_000));
+  // Stuck checker — polls position every STUCK_CHECK_INTERVAL ms
+  const stuckChecker = setInterval(() => {
+    if (done) return;
 
-    const timeout = setTimeout(() => { cleanup(); resolve(false); }, adaptiveTimeout);
+    const cur = bot.entity.position;
+    const moved = cur.distanceTo(lastPos);
 
-    const stuckChecker = setInterval(async () => {
-      if (done) return;
+    if (moved < STUCK_MIN_MOVE) {
+      stuckTicks++;
 
-      const cur   = bot.entity.position;
-      const moved = cur.distanceTo(lastPos);
+      if (stuckTicks >= STUCK_MAX_TICKS) {
+        stuckTicks = 0;
+        stuckResets++;
 
-      if (moved < STUCK_MIN_MOVE) {
-        stuckTicks++;
+        if (stuckResets > MAX_STUCK_RESETS) {
+          log.warn('[nav] stuck — giving up after baritone retries');
+          done = true;
+          try { ash(bot).stop(); } catch {}
+          return;
+        }
 
-        if (stuckTicks >= STUCK_MAX_TICKS) {
-          stuckTicks = 0;
-          unstickCount++;
+        log.warn(`[nav] stuck — forcing baritone re-plan (${stuckResets}/${MAX_STUCK_RESETS})`);
+        try { ash(bot).stop(); } catch {}
+      }
+    } else {
+      stuckTicks   = 0;
+      stuckResets  = 0;
+    }
 
-          if (unstickCount > MAX_UNSTICK_ATTEMPTS) {
-            log.warn('[nav] stuck — all recovery attempts failed');
-            cleanup();
-            resolve(false);
-            return;
-          }
+    lastPos = cur.clone();
+  }, STUCK_CHECK_INTERVAL);
 
-          log.warn(`[nav] stuck — attempting recovery (${unstickCount}/${MAX_UNSTICK_ATTEMPTS})`);
+  try {
+    // Race: baritone goto vs timeout
+    const result = await Promise.race([
+      (async () => {
+        // If stuck checker stopped it, retry up to MAX_STUCK_RESETS times
+        for (let attempt = 0; attempt <= MAX_STUCK_RESETS; attempt++) {
+          if (done) return false;
 
-          try { bot.pathfinder.setGoal(null); } catch { }
-          await unstick(bot, unstickCount - 1);
-
-          if (done) return;
-
-          applyMovements(bot);
           try {
-            bot.pathfinder.setGoal(goal, true);
-          } catch {
-            cleanup();
-            resolve(false);
+            await ash(bot).goto(goal);
+            return true;  // goal reached
+          } catch (e: any) {
+            // If we're done (stuck checker gave up), don't retry
+            if (done) return false;
+
+            // If baritone was stopped by stuck checker, loop will retry
+            if (stuckResets > 0 && attempt < MAX_STUCK_RESETS) {
+              await sleep(300);
+              continue;
+            }
+
+            // Genuine pathfinding failure
+            log.warn(`[nav] pathfinding failed: ${e.message ?? e}`);
+            return false;
           }
         }
-      } else {
-        stuckTicks   = 0;
-        unstickCount = 0;
-      }
+        return false;
+      })(),
+      sleep(adaptiveTimeout).then(() => {
+        log.warn('[nav] timeout reached');
+        return false;
+      }),
+    ]);
 
-      lastPos = cur.clone();
-    }, STUCK_CHECK_INTERVAL);
-
-    function onReached() { cleanup(); resolve(true); }
-    function onFailed()  { cleanup(); resolve(false); }
-
-    function onPathUpdate(r: any) {
-      if (r.status !== 'noPath') return;
-
-      noPathCount++;
-
-      if (noPathCount === 1) {
-        // FIX Bug #8: on first noPath, try wandering to reposition then retry.
-        // Previously nothing happened on the first noPath — the bot silently
-        // burned through the full timeout (up to 90s) doing nothing useful.
-        log.warn('[nav] no path — trying wander reposition then retry');
-        wander(bot, 8, 3).then(() => {
-          if (done) return;
-          applyMovements(bot);
-          try {
-            bot.pathfinder.setGoal(goal, true);
-          } catch {
-            cleanup();
-            resolve(false);
-          }
-        });
-      } else {
-        // FIX Bug #8: second noPath after repositioning — path is genuinely
-        // blocked. Give up immediately rather than waiting for the timeout.
-        log.warn('[nav] no path after reposition, giving up');
-        cleanup();
-        resolve(false);
-      }
-    }
-
-    bot.once('goal_reached',         onReached);
-    (bot as any).once('goal_failed', onFailed);
-    (bot as any).on('path_update',   onPathUpdate);
-
-    function cleanup() {
-      if (done) return;
-      done = true;
-      clearTimeout(timeout);
-      clearInterval(stuckChecker);
-      bot.removeListener('goal_reached',             onReached);
-      (bot as any).removeListener('goal_failed',     onFailed);
-      (bot as any).removeListener('path_update',     onPathUpdate);
-      try { bot.pathfinder.setGoal(null); } catch { }
-      bot.clearControlStates();
-    }
-
-    try {
-      bot.pathfinder.setGoal(goal, true);
-    } catch {
-      cleanup();
-      resolve(false);
-    }
-  });
+    return result;
+  } finally {
+    done = true;
+    clearInterval(stuckChecker);
+    try { ash(bot).stop(); } catch {}
+    bot.clearControlStates();
+  }
 }
 
 // ─── Block navigation ─────────────────────────────────────────────────────────
@@ -239,6 +138,43 @@ export async function goToBlock(
 ): Promise<boolean> {
   const { x, y, z } = block.position;
   return navigateTo(bot, x, y, z, reach);
+}
+
+// ─── Follow entity (replaces GoalFollow) ──────────────────────────────────────
+
+export async function followEntity(
+  bot: Bot,
+  entity: { position: { x: number; y: number; z: number } } | null,
+  range = 3,
+  durationMs = 30_000,
+  getEntity?: () => ({ position: { x: number; y: number; z: number } } | null),
+): Promise<boolean> {
+  const start = Date.now();
+
+  while (Date.now() - start < durationMs) {
+    const target = getEntity ? getEntity() : entity;
+    if (!target) return false;
+
+    const dist = bot.entity.position.distanceTo(
+      new Vec3(target.position.x, target.position.y, target.position.z)
+    );
+
+    if (dist > range + 1) {
+      // Move closer — short timeout so we re-evaluate often
+      await navigateTo(
+        bot,
+        target.position.x,
+        target.position.y,
+        target.position.z,
+        range,
+        3_000,
+      );
+    } else {
+      // Already in range, just wait a tick
+      await sleep(300);
+    }
+  }
+  return true;
 }
 
 // ─── Wander ───────────────────────────────────────────────────────────────────
@@ -254,6 +190,13 @@ export async function wander(bot: Bot, radius = 20, attempts = 5): Promise<boole
     if (ok) return true;
   }
   return false;
+}
+
+// ─── Stop navigation ──────────────────────────────────────────────────────────
+
+export function stopNavigation(bot: Bot): void {
+  try { ash(bot).stop(); } catch {}
+  bot.clearControlStates();
 }
 
 // ─── Head movement ────────────────────────────────────────────────────────────

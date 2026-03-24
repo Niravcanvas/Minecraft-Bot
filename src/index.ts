@@ -6,7 +6,7 @@ import { Executor }       from './executor';
 import { LearningMemory } from './memory/learning';
 import { TrustMemory }    from './memory/trust';
 import { WorldMemory }    from './memory/world';
-import { parseChatIntent, intentToGoal, proactiveChat, buildBotContext } from './goals/chat';
+import { proactiveChat } from './goals/chat';
 import { lookAround, lookAtNearestPlayer } from './utils/navigation';
 import { log }            from './utils/logger';
 import { initChatQueue, queueChat } from './utils/chat_queue';
@@ -24,7 +24,7 @@ const cfg = {
   },
   ollamaUrl:    process.env.OLLAMA_URL    ?? 'http://localhost:11434',
   ollamaModel:  process.env.OLLAMA_MODEL  ?? 'qwen2.5:1.5b',
-  goalTickMs:   Number(process.env.GOAL_TICK_MS    ?? 8000),
+  goalTickMs:   Number(process.env.GOAL_TICK_MS    ?? 2000),
   safetyTickMs: Number(process.env.SAFETY_TICK_MS  ?? 1000),
 };
 
@@ -44,13 +44,10 @@ async function main() {
 
   const llm = new OllamaClient(cfg.ollamaModel, cfg.ollamaUrl);
 
-  // ── Ollama is now OPTIONAL — warn but don't exit ──
-  const ollamaReady = await llm.ping();
-  if (!ollamaReady) {
-    log.warn('Bot will start in DETERMINISTIC-ONLY mode.');
-    log.warn('Chat responses and LLM decisions disabled until Ollama comes online.');
-  }
-  llm.startBackgroundPing();   // checks every 60s if Ollama becomes available
+  // LLM is DISABLED — running in pure deterministic/survival mode
+  log.info('🧠 Running in SURVIVAL mode (LLM disabled)');
+  log.info('  All decisions are deterministic. Chat uses keyword matching only.');
+  llm.startBackgroundPing();   // silently watches in case user re-enables later
 
   const learning = new LearningMemory();
   const trust    = new TrustMemory();
@@ -161,6 +158,7 @@ function startBot(
         if (goalBusy || emergencyBusy) { await sleep(200); continue; }
 
         goalBusy = true;
+        const goalStart = Date.now();
         try {
           const goal = await brain.pickGoal();
           proactiveChat(bot, `${goal.goal}_${goal.target}`, undefined, queueChat);
@@ -172,7 +170,10 @@ function startBot(
           goalBusy = false;
         }
 
-        await sleep(cfg.goalTickMs);
+        // Adaptive sleep: short delay after quick goals, longer after slow ones
+        const elapsed = Date.now() - goalStart;
+        const tickDelay = elapsed < 2000 ? 500 : elapsed < 5000 ? 1000 : cfg.goalTickMs;
+        await sleep(tickDelay);
       }
     }
 
@@ -293,31 +294,36 @@ function startBot(
       return;
     }
 
-    // ── Natural language chat ──
-    try {
-      const context = buildBotContext(bot);
-      const intent  = await parseChatIntent(llm, username, message, context);
-      log.info(`[chat] intent=${intent.intent} goal=${intent.goal}(${intent.target}) reply="${intent.reply}"`);
-      if (intent.reply) queueChat(bot, intent.reply);
-      const goal = intentToGoal(intent);
-      if (goal) {
-        brain.pushPlayerGoal(goal);
-        log.info(`[chat] queued: ${goal.goal}(${goal.target})`);
-      }
-    } catch (e: any) {
-      log.error(`Chat error: ${e.message}`);
-      // Fallback when LLM is unavailable
-      if (llm.isAvailable()) {
-        try {
-          const response = await llm.chat([
-            { role: 'system', content: 'You are a Minecraft bot. Be short and fun.' },
-            { role: 'user',   content: `${username}: ${message}` },
-          ]);
-          queueChat(bot, response);
-        } catch {}
-      } else {
-        queueChat(bot, "Hey! I'm busy surviving. Try !help for commands!");
-      }
+    // ── Natural language chat (keyword-only, no LLM) ──
+    const m = message.toLowerCase();
+    if (/\b(follow|come here|come to me)\b/.test(m)) {
+      brain.pushPlayerGoal({ goal: 'social', target: 'follow_trusted', reason: `${username} asked` });
+      queueChat(bot, `Following you, ${username}! 🏃`);
+    } else if (/\b(stop|halt|freeze|stay)\b/.test(m)) {
+      queueChat(bot, 'Stopped. 🛑');
+    } else if (/\b(wood|tree|log)\b/.test(m)) {
+      brain.pushPlayerGoal({ goal: 'gather', target: 'wood', reason: `${username} asked` });
+      queueChat(bot, 'Chopping trees! 🪣');
+    } else if (/\b(diamond)\b/.test(m)) {
+      brain.pushPlayerGoal({ goal: 'gather', target: 'diamond', reason: `${username} asked` });
+      queueChat(bot, 'Hunting diamonds! 💎');
+    } else if (/\b(iron)\b/.test(m)) {
+      brain.pushPlayerGoal({ goal: 'gather', target: 'iron', reason: `${username} asked` });
+      queueChat(bot, 'Looking for iron! ⛏');
+    } else if (/\b(food|eat|hungry|starv)\b/.test(m)) {
+      brain.pushPlayerGoal({ goal: 'survive', target: 'eat', reason: `${username} asked` });
+      queueChat(bot, 'Eating! 🍖');
+    } else if (/\b(explore|go|wander|roam)\b/.test(m)) {
+      brain.pushPlayerGoal({ goal: 'explore', target: 'any', reason: `${username} asked` });
+      queueChat(bot, 'Going exploring! 🗺️');
+    } else if (/\b(build|shelter|house|base)\b/.test(m)) {
+      brain.pushPlayerGoal({ goal: 'build', target: 'shelter', reason: `${username} asked` });
+      queueChat(bot, 'Building a shelter! 🏠');
+    } else if (/\b(fight|kill|attack)\b/.test(m)) {
+      brain.pushPlayerGoal({ goal: 'combat', target: 'nearest', reason: `${username} asked` });
+      queueChat(bot, 'Fighting! ⚔️');
+    } else {
+      queueChat(bot, `Use !help to see commands, ${username}!`);
     }
   });
 
