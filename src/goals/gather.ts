@@ -1,7 +1,7 @@
 import { Bot } from 'mineflayer';
 import { BLOCK_ALIASES, TOOL_FOR_BLOCK, MIN_TIER_FOR_ORE, TOOL_TIERS } from '../data/blocks';
 import { getBestTool } from '../data/items';
-import { navigateTo, wander } from '../utils/navigation';
+import { navigateTo, wander, stopNavigation } from '../utils/navigation';
 import { log } from '../utils/logger';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -181,7 +181,7 @@ export async function executeGather(bot: Bot, target: string): Promise<{ success
     }
   }
 
-  try { bot.pathfinder.setGoal(null); } catch {}
+  stopNavigation(bot);
   if (mined > 0) await collectNearbyDrops(bot);
 
   const status = mined > 0 ? 'success' : 'failed';

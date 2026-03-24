@@ -1,6 +1,6 @@
 import { Bot } from 'mineflayer';
 import { TrustMemory } from '../memory/trust';
-import { navigateTo } from '../utils/navigation';
+import { navigateTo, followEntity, stopNavigation } from '../utils/navigation';
 import { log } from '../utils/logger';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -12,7 +12,6 @@ export async function executeSocial(
   target: string,
   trust: TrustMemory,
 ): Promise<{ success: boolean; reason: string }> {
-  const { goals } = require('mineflayer-pathfinder');
 
   // All online players except the bot itself, with a valid entity
   const players = Object.values(bot.players).filter(
@@ -38,9 +37,7 @@ export async function executeSocial(
           .normalize()
           .scale(20);
         const dest = bot.entity.position.plus(away);
-        bot.pathfinder.setGoal(new goals.GoalXZ(dest.x, dest.z));
-        await sleep(5000);
-        bot.pathfinder.setGoal(null);
+        await navigateTo(bot, dest.x, null, dest.z, 4, 6_000);
         return { success: true, reason: `fled from threat ${t.username}` };
       }
     }
@@ -48,9 +45,6 @@ export async function executeSocial(
   }
 
   // ─── Follow ───────────────────────────────────────────────────────────────
-  // FIX: "follow_trusted" now follows ANY non-threat player, not just trust>0.65.
-  // The goal was explicitly queued by a player chat command, so requiring
-  // trust>0.65 (which new players never have at 0.5 default) silently broke it.
   if (target === 'follow_trusted' || target === 'follow') {
     if (!players.length) return { success: false, reason: 'no players online' };
 
@@ -67,44 +61,47 @@ export async function executeSocial(
     bot.chat(`Following you, ${chosen.username}! 🏃`);
     log.brain(`[social] Following ${chosen.username}`);
 
-    // FIX: GoalFollow with dynamic=true so bot keeps re-pathing as player moves.
-    // FIX: follow duration raised from 12 s → 30 s so it actually follows.
-    bot.pathfinder.setGoal(new goals.GoalFollow(chosen.entity, 3), true);
-
     const FOLLOW_MS = 30_000;
-    const start = Date.now();
-    while (Date.now() - start < FOLLOW_MS) {
-      await sleep(500);
-      // Stop if player disconnected
-      if (!bot.players[chosen.username]?.entity) {
-        log.brain(`[social] ${chosen.username} left, stopping follow`);
-        break;
-      }
-      // Re-acquire entity reference (it can change between ticks)
-      const freshEntity = bot.players[chosen.username]?.entity;
-      if (freshEntity) {
-        try {
-          bot.pathfinder.setGoal(new goals.GoalFollow(freshEntity, 3), true);
-        } catch {}
-      }
-    }
 
-    bot.pathfinder.setGoal(null);
+    // Use followEntity with a getter that re-acquires the entity each poll
+    await followEntity(
+      bot,
+      null,
+      3,
+      FOLLOW_MS,
+      () => {
+        const p = bot.players[chosen.username];
+        if (!p?.entity) return null;
+        return p.entity;
+      },
+    );
+
+    stopNavigation(bot);
     bot.chat(`Done following ${chosen.username}.`);
     return { success: true, reason: `followed ${chosen.username} for ${FOLLOW_MS / 1000}s` };
   }
 
   // ─── Follow a specific named player ──────────────────────────────────────
-  // Handles targets like "follow:Steve" injected by the keyword parser
   if (target.startsWith('follow:')) {
     const name = target.slice(7);
     const p = bot.players[name];
     if (!p?.entity) return { success: false, reason: `${name} not found` };
 
     bot.chat(`On my way to ${name}!`);
-    bot.pathfinder.setGoal(new goals.GoalFollow(p.entity, 3), true);
-    await sleep(20_000);
-    bot.pathfinder.setGoal(null);
+
+    await followEntity(
+      bot,
+      null,
+      3,
+      20_000,
+      () => {
+        const player = bot.players[name];
+        if (!player?.entity) return null;
+        return player.entity;
+      },
+    );
+
+    stopNavigation(bot);
     return { success: true, reason: `followed ${name}` };
   }
 

@@ -1,7 +1,8 @@
 import mineflayer, { Bot, BotOptions } from 'mineflayer';
-import { pathfinder, Movements }       from 'mineflayer-pathfinder';
 import { log }                         from './utils/logger';
 
+const baritone = require('@miner-org/mineflayer-baritone');
+const pathfinder = baritone.loader;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export function createBot(cfg: {
@@ -23,34 +24,28 @@ export function createBot(cfg: {
   }
 
   bot.once('spawn', async () => {
-    const mcData    = require('minecraft-data')(bot.version);
-    const movements = new Movements(bot);
-    movements.canDig          = true;
-    movements.digCost         = 1;
-    movements.allowSprinting  = true;
-    movements.allowParkour    = true;
-    movements.allowFreeMotion = false;
-    movements.blocksCantBreak = new Set([
-      mcData.blocksByName['bedrock']?.id,
-      mcData.blocksByName['obsidian']?.id,
-    ].filter(Boolean));
-    bot.pathfinder.setMovements(movements);
+    // Configure baritone (ashfinder) settings
+    const ash = (bot as any).ashfinder;
+    if (ash) {
+      ash.config.breakBlocks      = true;
+      ash.config.placeBlocks      = true;
+      ash.config.parkour          = true;
+      ash.config.swimming         = true;
+      ash.config.maxFallDist      = 4;
+      ash.config.thinkTimeout     = 30_000;
+      ash.config.blocksToAvoid    = ['crafting_table', 'chest', 'furnace'];
+      ash.config.disposableBlocks = ['dirt', 'cobblestone', 'stone', 'andesite', 'granite', 'diorite', 'netherrack'];
+    }
 
     log.divider();
     log.success(`Bot "${bot.username}" spawned on ${cfg.host}:${cfg.port}`);
     log.info(`Version: ${bot.version}`);
+    log.info('Baritone pathfinder loaded ✔');
     log.divider();
 
     if (cfg.password) {
-      // FIX Bug #14: old code used fixed sleeps (2000ms + 1500ms) which fired
-      // /register before the server's auth prompt arrived on slow/loaded
-      // servers, causing the commands to be silently ignored and the bot to
-      // never authenticate.
-      //
-      // New approach: wait for the server to actually send a chat message
-      // containing "register", "login", or "password" before responding.
-      // Falls back to an 8s timeout if the server never sends a prompt
-      // (e.g. a server that uses a different auth plugin).
+      // Wait for the server to actually send a chat message containing
+      // "register", "login", or "password" before responding.
       await new Promise<void>(resolve => {
         const handler = (_username: string, message: string) => {
           const lower = message.toLowerCase();
@@ -74,7 +69,7 @@ export function createBot(cfg: {
 
       log.info('Sending /register...');
       bot.chat(`/register ${cfg.password} ${cfg.password}`);
-      await sleep(2000);   // give server time to process register before login
+      await sleep(2000);
       log.info('Sending /login...');
       bot.chat(`/login ${cfg.password}`);
       await sleep(1000);

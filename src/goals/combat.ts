@@ -2,7 +2,7 @@ import { Bot }   from 'mineflayer';
 import { Entity } from 'prismarine-entity';
 import { getNearestHostile, HOSTILE_NAMES } from '../data/mobs';
 import { getBestTool } from '../data/items';
-import { navigateTo }  from '../utils/navigation';
+import { navigateTo, stopNavigation }  from '../utils/navigation';
 import { log } from '../utils/logger';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -118,13 +118,9 @@ export async function executeCombat(
 
     const dist = bot.entity.position.distanceTo(mob.position);
 
-    // Close in if too far
+    // Close in if too far — use baritone GoalNear for short-range approach
     if (dist > ATTACK_REACH) {
-      bot.pathfinder.setGoal(
-        new (require('mineflayer-pathfinder').goals.GoalFollow)(mob, 2),
-        true
-      );
-      await sleep(300);
+      await navigateTo(bot, mob.position.x, mob.position.y, mob.position.z, 2, 3_000);
       continue;
     }
 
@@ -141,7 +137,7 @@ export async function executeCombat(
     await sleep(50);
   }
 
-  bot.pathfinder.setGoal(null);
+  stopNavigation(bot);
   return {
     success: hits > 0,
     reason: hits > 0 ? `fought ${mobName} (${hits} hits, still alive)` : `could not engage ${mobName}`,
@@ -167,9 +163,7 @@ async function fightCreeper(
 
     if (dist > ATTACK_REACH + 1) {
       // Move in for a hit
-      const { goals: g } = require('mineflayer-pathfinder');
-      bot.pathfinder.setGoal(new g.GoalFollow(creeper, 2), true);
-      await sleep(400);
+      await navigateTo(bot, creeper.position.x, creeper.position.y, creeper.position.z, 2, 3_000);
     } else if (dist <= ATTACK_REACH) {
       // Hit and immediately retreat
       try {
@@ -188,7 +182,7 @@ async function fightCreeper(
     await sleep(50);
   }
 
-  bot.pathfinder.setGoal(null);
+  stopNavigation(bot);
   return { success: hits > 0, reason: `fought creeper (${hits} hits)` };
 }
 
