@@ -1,0 +1,54 @@
+{
+  "Kernal": {
+    "username": "Kernal",
+    "trustScore": 0,
+    "interactions": [
+      "11:24:04: attacked me",
+      "11:27:52: attacked me",
+      "11:27:56: attacked me",
+      "11:27:58: attacked me",
+      "11:27:59: attacked me",
+      "11:28:00: attacked me",
+      "11:28:00: attacked me",
+      "11:29:07: attacked me",
+      "11:29:08: attacked me",
+      "11:29:10: attacked me",
+      "11:29:17: attacked me",
+      "11:48:37: attacked me",
+      "12:27:10: attacked me"
+    ],
+    "lastSeen": 1774355230579,
+    "gaveMeItems": [],
+    "attackedMe": true
+  },
+  "GravityFallss": {
+    "username": "GravityFallss",
+    "trustScore": 0,
+    "interactions": [
+      "11:27:53: attacked me",
+      "12:19:17: attacked me",
+      "12:21:55: attacked me",
+      "12:23:24: attacked me"
+    ],
+    "lastSeen": 1774355004074,
+    "gaveMeItems": [],
+    "attackedMe": true
+  },
+  "DurveshLivee": {
+    "username": "DurveshLivee",
+    "trustScore": 0,
+    "interactions": [
+      "11:59:35: attacked me",
+      "12:27:46: attacked me",
+      "12:30:10: attacked me",
+      "12:34:26: attacked me",
+      "12:53:54: attacked me",
+      "12:53:58: attacked me",
+      "12:53:59: attacked me"
+    ],
+    "lastSeen": 1774356839145,
+    "gaveMeItems": [],
+    "attackedMe": true,
+    "chatCount": 0
+  }
+}
